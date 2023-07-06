@@ -21,8 +21,7 @@ const PORT = 8081;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 //Set up default mongoose connection
 // var mongoDB = `mongodb://${DB_USER}:${DB_PASSWORD}@127.0.0.1:27017/dapproval-user-service?authSource=admin`;
-var mongoDB = process.env.TICKETS_DB ||
-    `mongodb+srv://mongo-admin:2tij6e0anAgKU6tb@myfreecluster.kxvgw.mongodb.net/tickets?retryWrites=true&w=majority`;
+var mongoDB = process.env.TICKETS_DB;
 mongoose_1.default.connect(mongoDB);
 //Get the default connection
 var db = mongoose_1.default.connection;

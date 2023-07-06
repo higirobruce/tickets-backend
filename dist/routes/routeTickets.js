@@ -71,7 +71,9 @@ router.get("/validate/:number", (req, res) => __awaiter(void 0, void 0, void 0, 
     if (ticket)
         res.send(ticket);
     else
-        res.status(404).send({ erroMessage: 'Ticket not found or already consumed' });
+        res
+            .status(404)
+            .send({ erroMessage: "Ticket not found or already consumed" });
 }));
 router.post("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -90,6 +92,36 @@ router.post("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
                 });
                 res.status(201).send(ticket);
             });
+        });
+    }
+    catch (err) {
+        res.status(500).send({ errorMessage: `${err}` });
+    }
+}));
+router.post("/batch/:quantity", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    let { quantity } = req.params;
+    let tickets = [];
+    try {
+        for (let i = 0; i < parseInt(quantity); i++) {
+            let number = yield (0, exports.generateTicketNumber)();
+            let { ticketPackage } = req.body;
+            let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
+            let qrCode = "";
+            qrcode_1.default.toDataURL(qrParam, function (err, url) {
+                qrCode = url;
+                let ticket = (0, controllerTickets_1.default)({
+                    number,
+                    qrCode,
+                    ticketPackage,
+                });
+                tickets.push(ticket);
+            });
+        }
+        let allPromises = Promise.all(tickets);
+        allPromises.then(v => {
+            res.status(201).send(v);
+        }).catch(err => {
+            res.status(500).send({ errorMessage: `${err}` });
         });
     }
     catch (err) {
