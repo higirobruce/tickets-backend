@@ -47,17 +47,21 @@ router.get("/", async (req, res) => {
 
 router.get("/validate/:number", async (req, res) => {
   let number = req.params.number;
-  let ticket = await ticketModle.findOneAndUpdate(
-    { number, status: Statuses.pending },
-    { $set: { status: Statuses.consumed } },
-    { new: true }
-  );
 
-  if (ticket) res.send('Ticket successfully consumed!');
-  else
-    res
-      .status(404)
-      .send({ erroMessage: "Ticket not found or already consumed" });
+  
+  // let ticket = await ticketModle.findOneAndUpdate(
+  //   { number, status: Statuses.pending },
+  //   { $set: { status: Statuses.consumed } },
+  //   { new: true }
+  // );
+
+  // if (ticket) res.send('Ticket successfully consumed!');
+  // else
+  //   res
+  //     .status(404)
+  //     .send({ erroMessage: "Ticket not found or already consumed" });
+
+  res.send('Tickets can not be consumed now.')
 });
 
 router.post("/", async (req, res) => {
