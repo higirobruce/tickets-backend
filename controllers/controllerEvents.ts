@@ -1,4 +1,5 @@
-import { eventModel, eventSchema } from "../models/events";
+import { eventModel } from "../models/events";
+
 
 export async function getAllEvents() {
   try {

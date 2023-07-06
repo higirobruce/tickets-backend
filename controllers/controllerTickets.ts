@@ -1,5 +1,6 @@
 import { ticketModle } from "../models/tickets";
 
+
 export async function getAllTickets() {
   try {
     let tickets = await ticketModle.find({});

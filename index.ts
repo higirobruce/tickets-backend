@@ -7,7 +7,7 @@ import MongoStore = require("connect-mongo");
 import mongoose from "mongoose";
 import jwt, { JwtPayload } from "jsonwebtoken";
 
-import usersRoute from "../src/routes/routeUsers";
+import usersRoute from "./routes/routeUsers";
 import eventsRoute from "./routes/routeEvents";
 import momoRoute from "./routes/routeMomo";
 import ticketsRoute from "./routes/routeTickets";

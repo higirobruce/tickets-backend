@@ -1,10 +1,7 @@
 import { Router } from "express";
 import { ensureUserAuthorized } from "..";
-import {
-  createTicket,
-  getAllEvents,
-  getEventById,
-} from "../controllers/controllerEvents";
+import { createTicket, getAllEvents, getEventById } from "../controllers/controllerEvents";
+
 let router = Router();
 
 router.get("/", async (req, res) => {
