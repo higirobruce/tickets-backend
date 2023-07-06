@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateTicketNumber = exports.createQrCode = void 0;
+exports.generateTicketNumbers = exports.generateTicketNumber = exports.createQrCode = void 0;
 const qrcode_1 = __importDefault(require("qrcode"));
 const express_1 = require("express");
 const tickets_1 = require("../models/tickets");
@@ -48,18 +48,35 @@ function createQrCode(param) {
     });
 }
 exports.createQrCode = createQrCode;
-const generateTicketNumber = () => __awaiter(void 0, void 0, void 0, function* () {
-    // Get the last saved document
-    const lastDocument = yield tickets_1.ticketModle.findOne().sort({ number: -1 });
-    // Generate a new 10-digit number, starting from 1000000000 and incrementing by 1
-    let newNumber = 1000000000;
-    if (lastDocument && lastDocument.number) {
-        newNumber = lastDocument.number + 1;
-    }
-    // Return the new number
-    return newNumber;
-});
+function generateTicketNumber() {
+    return __awaiter(this, void 0, void 0, function* () {
+        // Get the last saved document
+        const lastDocument = yield tickets_1.ticketModle.findOne().sort({ number: -1 });
+        // Generate a new 10-digit number, starting from 1000000000 and incrementing by 1
+        let newNumber = 1000000000;
+        if (lastDocument && lastDocument.number) {
+            newNumber = lastDocument.number + 1;
+        }
+        // Return the new number
+        return newNumber;
+    });
+}
 exports.generateTicketNumber = generateTicketNumber;
+;
+function generateTicketNumbers(quantity) {
+    return __awaiter(this, void 0, void 0, function* () {
+        // Get the last saved document
+        let totalNumber = 10000000 + (yield tickets_1.ticketModle.find().count());
+        let numbers = [];
+        for (let i = 0; i < quantity; i++) {
+            totalNumber++;
+            numbers.push(totalNumber);
+        }
+        return numbers;
+    });
+}
+exports.generateTicketNumbers = generateTicketNumbers;
+;
 let router = (0, express_1.Router)();
 router.get("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let tickets = yield (0, controllerTickets_1.getAllTickets)();
@@ -69,7 +86,7 @@ router.get("/validate/:number", (req, res) => __awaiter(void 0, void 0, void 0, 
     let number = req.params.number;
     let ticket = yield tickets_1.ticketModle.findOneAndUpdate({ number, status: events_1.Statuses.pending }, { $set: { status: events_1.Statuses.consumed } }, { new: true });
     if (ticket)
-        res.send(ticket);
+        res.send('Ticket successfully consumed!');
     else
         res
             .status(404)
@@ -77,7 +94,7 @@ router.get("/validate/:number", (req, res) => __awaiter(void 0, void 0, void 0, 
 }));
 router.post("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        let number = yield (0, exports.generateTicketNumber)();
+        let number = yield generateTicketNumber();
         let { ticketPackage } = req.body;
         let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
         let qrCode = "";
@@ -102,21 +119,22 @@ router.post("/batch/:quantity", (req, res) => __awaiter(void 0, void 0, void 0, 
     let { quantity } = req.params;
     let tickets = [];
     try {
-        for (let i = 0; i < parseInt(quantity); i++) {
-            let number = yield (0, exports.generateTicketNumber)();
+        let numbers = yield generateTicketNumbers(parseInt(quantity));
+        numbers.forEach(n => {
             let { ticketPackage } = req.body;
-            let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
+            // let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
+            let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}`;
             let qrCode = "";
             qrcode_1.default.toDataURL(qrParam, function (err, url) {
                 qrCode = url;
                 let ticket = (0, controllerTickets_1.default)({
-                    number,
+                    number: n,
                     qrCode,
                     ticketPackage,
                 });
                 tickets.push(ticket);
             });
-        }
+        });
         let allPromises = Promise.all(tickets);
         allPromises.then(v => {
             res.status(201).send(v);

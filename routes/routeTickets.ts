@@ -12,7 +12,7 @@ export function createQrCode(param: any) {
   });
 }
 
-export const generateTicketNumber = async () => {
+export async function generateTicketNumber(){
   // Get the last saved document
   const lastDocument = await ticketModle.findOne().sort({ number: -1 });
   // Generate a new 10-digit number, starting from 1000000000 and incrementing by 1
@@ -23,6 +23,19 @@ export const generateTicketNumber = async () => {
 
   // Return the new number
   return newNumber;
+};
+
+export async function generateTicketNumbers(quantity: number){
+  // Get the last saved document
+  let totalNumber = 10000000 + await ticketModle.find().count();
+  let numbers:any[] = []
+  for(let i=0;i<quantity;i++){
+    totalNumber++
+    numbers.push(totalNumber)
+  }
+
+  return numbers
+  
 };
 
 let router = Router();
@@ -76,25 +89,27 @@ router.post("/batch/:quantity", async (req, res) => {
   let { quantity } = req.params;
   let tickets: any[] = [];
   try {
-    for (let i = 0; i < parseInt(quantity); i++) {
-      let number = await generateTicketNumber();
+    let numbers = await generateTicketNumbers(parseInt(quantity))
+
+    numbers.forEach(n=>{
+      
       let { ticketPackage } = req.body;
 
       // let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
-      let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${number}`;
+      let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}`;
 
       let qrCode = "";
       QRCode.toDataURL(qrParam, function (err, url) {
         qrCode = url;
 
         let ticket = createTicket({
-          number,
+          number:n,
           qrCode,
           ticketPackage,
         });
         tickets.push(ticket);
       });
-    }
+    })
 
     let allPromises = Promise.all(tickets)
 
