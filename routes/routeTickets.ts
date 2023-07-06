@@ -80,7 +80,8 @@ router.post("/batch/:quantity", async (req, res) => {
       let number = await generateTicketNumber();
       let { ticketPackage } = req.body;
 
-      let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
+      // let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
+      let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${number}`;
 
       let qrCode = "";
       QRCode.toDataURL(qrParam, function (err, url) {
