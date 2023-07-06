@@ -40,7 +40,7 @@ router.get("/validate/:number", async (req, res) => {
     { new: true }
   );
 
-  if (ticket) res.send(ticket);
+  if (ticket) res.send('Ticket successfully consumed!');
   else
     res
       .status(404)
