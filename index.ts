@@ -21,7 +21,7 @@ declare module "express-session" {
 }
 // dotenv.config();
 
-const PORT =  process.env.PORT || 8081;
+const PORT =  8081;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 //Set up default mongoose connection
 // var mongoDB = `mongodb://${DB_USER}:${DB_PASSWORD}@127.0.0.1:27017/dapproval-user-service?authSource=admin`;

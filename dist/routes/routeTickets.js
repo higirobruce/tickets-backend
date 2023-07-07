@@ -41,7 +41,6 @@ const qrcode_1 = __importDefault(require("qrcode"));
 const express_1 = require("express");
 const tickets_1 = require("../models/tickets");
 const controllerTickets_1 = __importStar(require("../controllers/controllerTickets"));
-const events_1 = require("../models/events");
 function createQrCode(param) {
     qrcode_1.default.toDataURL(param, function (err, url) {
         return url;
@@ -84,13 +83,17 @@ router.get("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
 }));
 router.get("/validate/:number", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let number = req.params.number;
-    let ticket = yield tickets_1.ticketModle.findOneAndUpdate({ number, status: events_1.Statuses.pending }, { $set: { status: events_1.Statuses.consumed } }, { new: true });
-    if (ticket)
-        res.send('Ticket successfully consumed!');
-    else
-        res
-            .status(404)
-            .send({ erroMessage: "Ticket not found or already consumed" });
+    // let ticket = await ticketModle.findOneAndUpdate(
+    //   { number, status: Statuses.pending },
+    //   { $set: { status: Statuses.consumed } },
+    //   { new: true }
+    // );
+    // if (ticket) res.send('Ticket successfully consumed!');
+    // else
+    //   res
+    //     .status(404)
+    //     .send({ erroMessage: "Ticket not found or already consumed" });
+    res.send('Tickets can not be consumed now.');
 }));
 router.post("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
