@@ -78,6 +78,7 @@ async function getToken(req: any) {
       if (response.ok) {
         return response.json();
       } else {
+        console.log(response)
         throw Error(response.statusText);
       }
     })
