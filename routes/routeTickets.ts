@@ -54,7 +54,7 @@ router.get("/:id", async (req, res) => {
   res.send(ticket);
 });
 
-router.get("/cofirm-validate/:number", async (req, res) => {
+router.get("/validate/:number", async (req, res) => {
   let number = req.params.number;
 
   let ticket = await ticketModel.findOneAndUpdate(
@@ -72,7 +72,7 @@ router.get("/cofirm-validate/:number", async (req, res) => {
   // res.send("Tickets can not be consumed now.");
 });
 
-router.get("/validate/:number", async (req, res) => {
+router.get("/confirm/:number", async (req, res) => {
   let number = req.params.number;
 
   // let ticket = await ticketModel.findOneAndUpdate(
