@@ -63,6 +63,7 @@ router.get("/getStatusOfRequest/:refId", async (req, res) => {
     });
 });
 
+
 export default router;
 async function getToken(req: any) {
   return fetch("https://sandbox.momodeveloper.mtn.com/collection/token/", {

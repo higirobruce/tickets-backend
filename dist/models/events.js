@@ -20,6 +20,7 @@ var Statuses;
     Statuses["posponed"] = "postponed";
     Statuses["upcoming"] = "upcoming";
     Statuses["consumed"] = "consumed";
+    Statuses["sold"] = "sold";
 })(Statuses || (exports.Statuses = Statuses = {}));
 exports.packageSchema = new mongoose_1.default.Schema({
     title: {

@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.ticketModle = exports.ticketSchema = exports.packageSchema = exports.Statuses = exports.Currencies = void 0;
+exports.ticketModel = exports.ticketSchema = exports.packageSchema = exports.Statuses = exports.Currencies = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
 var Currencies;
 (function (Currencies) {
@@ -52,4 +52,4 @@ exports.ticketSchema = new mongoose_1.default.Schema({
         default: Statuses.pending,
     },
 }, { timestamps: true });
-exports.ticketModle = mongoose_1.default.model("tickets", exports.ticketSchema);
+exports.ticketModel = mongoose_1.default.model("tickets", exports.ticketSchema);

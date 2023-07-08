@@ -13,7 +13,8 @@ export enum Statuses {
   cancelled='cancelled',
   posponed='postponed',
   upcoming='upcoming',
-  consumed='consumed'
+  consumed='consumed',
+  sold = 'sold'
 }
 
 export const packageSchema = new mongoose.Schema({

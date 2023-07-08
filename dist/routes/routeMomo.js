@@ -75,7 +75,7 @@ function getToken(req) {
         return (0, node_fetch_1.default)("https://sandbox.momodeveloper.mtn.com/collection/token/", {
             method: "POST",
             headers: {
-                Authorization: process.env.MOMO_BASIC_AUTH || "",
+                Authorization: `Basic ${process.env.MOMO_BASIC_AUTH}` || "",
                 "X-Reference-Id": "b12d7b22-3057-4c8e-ad50-63904171d18a",
                 "Ocp-Apim-Subscription-Key": process.env.MOMO_SUBSCRIPTION_KEY || "",
                 "X-Target-Environment": process.env.MOMO_ENVIRONMENT || "",
@@ -86,6 +86,7 @@ function getToken(req) {
                 return response.json();
             }
             else {
+                console.log(response);
                 throw Error(response.statusText);
             }
         })

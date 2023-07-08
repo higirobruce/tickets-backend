@@ -41,6 +41,7 @@ const qrcode_1 = __importDefault(require("qrcode"));
 const express_1 = require("express");
 const tickets_1 = require("../models/tickets");
 const controllerTickets_1 = __importStar(require("../controllers/controllerTickets"));
+const events_1 = require("../models/events");
 function createQrCode(param) {
     qrcode_1.default.toDataURL(param, function (err, url) {
         return url;
@@ -50,7 +51,7 @@ exports.createQrCode = createQrCode;
 function generateTicketNumber() {
     return __awaiter(this, void 0, void 0, function* () {
         // Get the last saved document
-        const lastDocument = yield tickets_1.ticketModle.findOne().sort({ number: -1 });
+        const lastDocument = yield tickets_1.ticketModel.findOne().sort({ number: -1 });
         // Generate a new 10-digit number, starting from 1000000000 and incrementing by 1
         let newNumber = 1000000000;
         if (lastDocument && lastDocument.number) {
@@ -61,11 +62,10 @@ function generateTicketNumber() {
     });
 }
 exports.generateTicketNumber = generateTicketNumber;
-;
 function generateTicketNumbers(quantity) {
     return __awaiter(this, void 0, void 0, function* () {
         // Get the last saved document
-        let totalNumber = 10000000 + (yield tickets_1.ticketModle.find().count());
+        let totalNumber = 10000000 + (yield tickets_1.ticketModel.find().count());
         let numbers = [];
         for (let i = 0; i < quantity; i++) {
             totalNumber++;
@@ -75,25 +75,35 @@ function generateTicketNumbers(quantity) {
     });
 }
 exports.generateTicketNumbers = generateTicketNumbers;
-;
 let router = (0, express_1.Router)();
 router.get("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let tickets = yield (0, controllerTickets_1.getAllTickets)();
     res.send(tickets);
 }));
+router.get("/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    let { id } = req.params;
+    let ticket = yield (0, controllerTickets_1.getTicketById)(id);
+    console.log(ticket);
+    res.send(ticket);
+}));
 router.get("/validate/:number", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let number = req.params.number;
-    // let ticket = await ticketModle.findOneAndUpdate(
-    //   { number, status: Statuses.pending },
-    //   { $set: { status: Statuses.consumed } },
-    //   { new: true }
-    // );
-    // if (ticket) res.send('Ticket successfully consumed!');
-    // else
-    //   res
-    //     .status(404)
-    //     .send({ erroMessage: "Ticket not found or already consumed" });
-    res.send('Tickets can not be consumed now.');
+    let ticket = yield tickets_1.ticketModel.findOneAndUpdate({ number, status: events_1.Statuses.sold }, { $set: { status: events_1.Statuses.consumed } }, { new: true });
+    if (ticket)
+        res.send(ticket);
+    else
+        res
+            .status(404)
+            .send({ erroMessage: "Ticket not found or already consumed" });
+    // res.send("Tickets can not be consumed now.");
+}));
+router.get("/sell/:number", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    let number = parseInt(req.params.number);
+    let ticket = yield tickets_1.ticketModel.findOneAndUpdate({ number, status: events_1.Statuses.pending }, { $set: { status: events_1.Statuses.sold } }, { new: true });
+    if (ticket)
+        res.send(ticket);
+    else
+        res.status(404).send({ erroMessage: "Ticket not found or already sold" });
 }));
 router.post("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -123,7 +133,7 @@ router.post("/batch/:quantity", (req, res) => __awaiter(void 0, void 0, void 0, 
     let tickets = [];
     try {
         let numbers = yield generateTicketNumbers(parseInt(quantity));
-        numbers.forEach(n => {
+        numbers.forEach((n) => {
             let { ticketPackage } = req.body;
             // let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
             let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}`;
@@ -139,9 +149,11 @@ router.post("/batch/:quantity", (req, res) => __awaiter(void 0, void 0, void 0, 
             });
         });
         let allPromises = Promise.all(tickets);
-        allPromises.then(v => {
+        allPromises
+            .then((v) => {
             res.status(201).send(v);
-        }).catch(err => {
+        })
+            .catch((err) => {
             res.status(500).send({ errorMessage: `${err}` });
         });
     }
