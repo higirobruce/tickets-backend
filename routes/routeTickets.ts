@@ -81,14 +81,14 @@ router.get("/validate/:number", async (req, res) => {
   //   { new: true }
   // );
 
-  let ticket = await ticketModel.findOne({ number, status: Statuses.sold });
+  let ticket = await ticketModel.findOne({ number, status: Statuses.pending });
   
   if (ticket) res.redirect(`https//eventixr.com/tickets/${ticket?._id}`);
 
   else
     res
       .status(404)
-      .send({ erroMessage: "Ticket not found or already consumed" });
+      .send({ erroMessage: "Ticket not found or already validated" });
 
   // res.send("Tickets can not be consumed now.");
 });
