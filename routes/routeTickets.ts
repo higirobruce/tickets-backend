@@ -83,7 +83,7 @@ router.get("/validate/:number", async (req, res) => {
 
   let ticket = await ticketModel.findOne({ number, status: Statuses.pending });
 
-  if (ticket) res.redirect(301, `https//eventixr.com/tickets/${ticket?._id}`);
+  if (ticket) res.redirect(301, `https://eventixr.com/tickets/${ticket?._id}`);
   else
     res
       .status(404)
