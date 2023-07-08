@@ -76,7 +76,6 @@ router.get("/validate/:number", async (req, res, next) => {
   //   { $set: { status: Statuses.consumed } },
   //   { new: true }
   // );
-  console.log('validating')
 
   let ticket = await ticketModel.findOne({ number, status: Statuses.pending });
 
