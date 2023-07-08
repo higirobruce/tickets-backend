@@ -9,6 +9,7 @@ import createTicket, {
   getTicketById,
 } from "../controllers/controllerTickets";
 import { Statuses } from "../models/events";
+import { validate } from "node-cron";
 export function createQrCode(param: any) {
   QRCode.toDataURL(param, function (err, url) {
     return url;
@@ -47,12 +48,7 @@ router.get("/", async (req, res) => {
   res.send(tickets);
 });
 
-router.get("/:id", async (req, res) => {
-  let { id } = req.params;
-  let ticket = await getTicketById(id);
-  console.log(ticket);
-  res.send(ticket);
-});
+
 
 router.get("/confirm-validate/:number", async (req, res) => {
   let number = req.params.number;
@@ -72,7 +68,7 @@ router.get("/confirm-validate/:number", async (req, res) => {
   // res.send("Tickets can not be consumed now.");
 });
 
-router.get("/validate/:number", async (req, res) => {
+router.get("/validate/:number", async (req, res, next) => {
   let number = req.params.number;
 
   // let ticket = await ticketModel.findOneAndUpdate(
@@ -80,10 +76,11 @@ router.get("/validate/:number", async (req, res) => {
   //   { $set: { status: Statuses.consumed } },
   //   { new: true }
   // );
+  console.log('validating')
 
   let ticket = await ticketModel.findOne({ number, status: Statuses.pending });
 
-  if (ticket) res.redirect(301, `https://eventixr.com/tickets/${ticket?._id}`);
+  if (ticket) res.redirect(301,`https://www.eventixr.com/tickets/${ticket?._id}`);
   else
     res
       .status(404)
@@ -102,6 +99,13 @@ router.get("/sell/:number", async (req, res) => {
   if (ticket) res.send(ticket);
   else
     res.status(404).send({ erroMessage: "Ticket not found or already sold" });
+});
+
+router.get("/:id", async (req, res) => {
+  let { id } = req.params;
+  let ticket = await getTicketById(id);
+  console.log(ticket);
+  res.send(ticket);
 });
 
 router.post("/", async (req, res) => {

@@ -80,12 +80,6 @@ router.get("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let tickets = yield (0, controllerTickets_1.getAllTickets)();
     res.send(tickets);
 }));
-router.get("/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    let { id } = req.params;
-    let ticket = yield (0, controllerTickets_1.getTicketById)(id);
-    console.log(ticket);
-    res.send(ticket);
-}));
 router.get("/confirm-validate/:number", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let number = req.params.number;
     let ticket = yield tickets_1.ticketModel.findOneAndUpdate({ number, status: events_1.Statuses.sold }, { $set: { status: events_1.Statuses.consumed } }, { new: true });
@@ -97,16 +91,17 @@ router.get("/confirm-validate/:number", (req, res) => __awaiter(void 0, void 0, 
             .send({ erroMessage: "Ticket not found or already consumed" });
     // res.send("Tickets can not be consumed now.");
 }));
-router.get("/validate/:number", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.get("/validate/:number", (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     let number = req.params.number;
     // let ticket = await ticketModel.findOneAndUpdate(
     //   { number, status: Statuses.sold },
     //   { $set: { status: Statuses.consumed } },
     //   { new: true }
     // );
+    console.log('validating');
     let ticket = yield tickets_1.ticketModel.findOne({ number, status: events_1.Statuses.pending });
     if (ticket)
-        res.redirect(301, `https://eventixr.com/tickets/${ticket === null || ticket === void 0 ? void 0 : ticket._id}`);
+        res.redirect(301, `https://www.eventixr.com/tickets/${ticket === null || ticket === void 0 ? void 0 : ticket._id}`);
     else
         res
             .status(404)
@@ -120,6 +115,12 @@ router.get("/sell/:number", (req, res) => __awaiter(void 0, void 0, void 0, func
         res.send(ticket);
     else
         res.status(404).send({ erroMessage: "Ticket not found or already sold" });
+}));
+router.get("/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    let { id } = req.params;
+    let ticket = yield (0, controllerTickets_1.getTicketById)(id);
+    console.log(ticket);
+    res.send(ticket);
 }));
 router.post("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
