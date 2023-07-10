@@ -51,5 +51,9 @@ exports.ticketSchema = new mongoose_1.default.Schema({
         type: String,
         default: Statuses.pending,
     },
+    momoRef: {
+        type: String,
+        required: true
+    }
 }, { timestamps: true });
 exports.ticketModel = mongoose_1.default.model("tickets", exports.ticketSchema);

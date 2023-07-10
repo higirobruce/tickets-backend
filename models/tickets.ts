@@ -48,6 +48,10 @@ export const ticketSchema = new mongoose.Schema(
       type: String,
       default: Statuses.pending,
     },
+    momoRef: {
+      type: String,
+      required: true
+    }
   },
   { timestamps: true }
 );

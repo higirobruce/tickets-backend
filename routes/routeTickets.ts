@@ -48,10 +48,55 @@ router.get("/", async (req, res) => {
   res.send(tickets);
 });
 
-
-
-router.get("/confirm-validate/:number", async (req, res) => {
+router.get("/validate/:number", async (req, res, next) => {
   let number = req.params.number;
+
+  // let ticket = await ticketModel.findOneAndUpdate(
+  //   { number, status: Statuses.sold },
+  //   { $set: { status: Statuses.consumed } },
+  //   { new: true }
+  // );
+
+  let ticket = await ticketModel.findOne({
+    number,
+    status: { $in: [Statuses.pending, Statuses.sold] },
+  });
+
+  if (ticket)
+    res.redirect(301, `https://www.eventixr.com/tickets/${ticket?._id}`);
+  else
+    res
+      .status(404)
+      .send({ erroMessage: "Ticket not found or already validated" });
+
+  // res.send("Tickets can not be consumed now.");
+});
+
+router.get("/sell/:number", async (req, res) => {
+  let number = parseInt(req.params.number);
+  let { momoRef } = req.query;
+
+  let ticketWithSameRef = await ticketModel.findOne({ momoRef });
+
+  if (ticketWithSameRef) {
+    res.statusMessage = "Momo Reference already exists";
+    res.status(500).send({ erroMessage: "Momo Reference already exists" });
+  } else {
+    let ticket = await ticketModel.findOneAndUpdate(
+      { number, status: Statuses.pending },
+      { $set: { status: Statuses.sold, momoRef } },
+      { new: true }
+    );
+    if (ticket) res.send(ticket);
+    else {
+      res.statusMessage = "Ticket not found or already sold";
+      res.status(404).send({ erroMessage: "Ticket not found or already sold" });
+    }
+  }
+});
+
+router.get("/consume/:number", async (req, res) => {
+  let number = parseInt(req.params.number);
 
   let ticket = await ticketModel.findOneAndUpdate(
     { number, status: Statuses.sold },
@@ -66,38 +111,6 @@ router.get("/confirm-validate/:number", async (req, res) => {
       .send({ erroMessage: "Ticket not found or already consumed" });
 
   // res.send("Tickets can not be consumed now.");
-});
-
-router.get("/validate/:number", async (req, res, next) => {
-  let number = req.params.number;
-
-  // let ticket = await ticketModel.findOneAndUpdate(
-  //   { number, status: Statuses.sold },
-  //   { $set: { status: Statuses.consumed } },
-  //   { new: true }
-  // );
-
-  let ticket = await ticketModel.findOne({ number, status: Statuses.pending });
-
-  if (ticket) res.redirect(301,`https://www.eventixr.com/tickets/${ticket?._id}`);
-  else
-    res
-      .status(404)
-      .send({ erroMessage: "Ticket not found or already validated" });
-
-  // res.send("Tickets can not be consumed now.");
-});
-
-router.get("/sell/:number", async (req, res) => {
-  let number = parseInt(req.params.number);
-  let ticket = await ticketModel.findOneAndUpdate(
-    { number, status: Statuses.pending },
-    { $set: { status: Statuses.sold } },
-    { new: true }
-  );
-  if (ticket) res.send(ticket);
-  else
-    res.status(404).send({ erroMessage: "Ticket not found or already sold" });
 });
 
 router.get("/:id", async (req, res) => {

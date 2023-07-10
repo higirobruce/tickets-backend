@@ -80,17 +80,6 @@ router.get("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let tickets = yield (0, controllerTickets_1.getAllTickets)();
     res.send(tickets);
 }));
-router.get("/confirm-validate/:number", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    let number = req.params.number;
-    let ticket = yield tickets_1.ticketModel.findOneAndUpdate({ number, status: events_1.Statuses.sold }, { $set: { status: events_1.Statuses.consumed } }, { new: true });
-    if (ticket)
-        res.send(ticket);
-    else
-        res
-            .status(404)
-            .send({ erroMessage: "Ticket not found or already consumed" });
-    // res.send("Tickets can not be consumed now.");
-}));
 router.get("/validate/:number", (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     let number = req.params.number;
     // let ticket = await ticketModel.findOneAndUpdate(
@@ -98,8 +87,10 @@ router.get("/validate/:number", (req, res, next) => __awaiter(void 0, void 0, vo
     //   { $set: { status: Statuses.consumed } },
     //   { new: true }
     // );
-    console.log('validating');
-    let ticket = yield tickets_1.ticketModel.findOne({ number, status: events_1.Statuses.pending });
+    let ticket = yield tickets_1.ticketModel.findOne({
+        number,
+        status: { $in: [events_1.Statuses.pending, events_1.Statuses.sold] },
+    });
     if (ticket)
         res.redirect(301, `https://www.eventixr.com/tickets/${ticket === null || ticket === void 0 ? void 0 : ticket._id}`);
     else
@@ -110,11 +101,32 @@ router.get("/validate/:number", (req, res, next) => __awaiter(void 0, void 0, vo
 }));
 router.get("/sell/:number", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let number = parseInt(req.params.number);
-    let ticket = yield tickets_1.ticketModel.findOneAndUpdate({ number, status: events_1.Statuses.pending }, { $set: { status: events_1.Statuses.sold } }, { new: true });
+    let { momoRef } = req.query;
+    let ticketWithSameRef = yield tickets_1.ticketModel.findOne({ momoRef });
+    if (ticketWithSameRef) {
+        res.statusMessage = "Momo Reference already exists";
+        res.status(500).send({ erroMessage: "Momo Reference already exists" });
+    }
+    else {
+        let ticket = yield tickets_1.ticketModel.findOneAndUpdate({ number, status: events_1.Statuses.pending }, { $set: { status: events_1.Statuses.sold, momoRef } }, { new: true });
+        if (ticket)
+            res.send(ticket);
+        else {
+            res.statusMessage = "Ticket not found or already sold";
+            res.status(404).send({ erroMessage: "Ticket not found or already sold" });
+        }
+    }
+}));
+router.get("/consume/:number", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    let number = parseInt(req.params.number);
+    let ticket = yield tickets_1.ticketModel.findOneAndUpdate({ number, status: events_1.Statuses.sold }, { $set: { status: events_1.Statuses.consumed } }, { new: true });
     if (ticket)
         res.send(ticket);
     else
-        res.status(404).send({ erroMessage: "Ticket not found or already sold" });
+        res
+            .status(404)
+            .send({ erroMessage: "Ticket not found or already consumed" });
+    // res.send("Tickets can not be consumed now.");
 }));
 router.get("/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let { id } = req.params;
