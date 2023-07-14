@@ -15,7 +15,7 @@ router.post("/requestToPay", async (req, res) => {
   let paymentPayload = req.body;
   console.log(paymentPayload);
 
-  fetch(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay`, {
+  fetch(`https://mtndeveloperapi.portal.mtn.co.rw/collection/v1_0/requesttopay`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${req.session.accessToken}`,
@@ -35,8 +35,7 @@ router.post("/requestToPay", async (req, res) => {
     });
 });
 
-
-router.get("/statusOfRequest/:refId", async (req, res) => {
+router.get("/getStatusOfRequest/:refId", async (req, res) => {
   let { refId } = req.params;
   fetch(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay/${refId}`, {
     method: "GET",

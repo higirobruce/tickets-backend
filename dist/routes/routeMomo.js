@@ -25,7 +25,7 @@ router.post("/requestToPay", (req, res) => __awaiter(void 0, void 0, void 0, fun
     yield getToken(req);
     let paymentPayload = req.body;
     console.log(paymentPayload);
-    (0, node_fetch_1.default)(`https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay`, {
+    (0, node_fetch_1.default)(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay`, {
         method: "POST",
         headers: {
             Authorization: `Bearer ${req.session.accessToken}`,
@@ -44,9 +44,9 @@ router.post("/requestToPay", (req, res) => __awaiter(void 0, void 0, void 0, fun
         res.send({ errorMessage: `${err}` });
     });
 }));
-router.get("/getStatusOfRequest/:refId", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+router.get("/statusOfRequest/:refId", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let { refId } = req.params;
-    (0, node_fetch_1.default)(`https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay/${refId}`, {
+    (0, node_fetch_1.default)(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay/${refId}`, {
         method: "GET",
         headers: {
             Authorization: `Bearer ${req.session.accessToken}`,
@@ -72,7 +72,7 @@ router.get("/getStatusOfRequest/:refId", (req, res) => __awaiter(void 0, void 0,
 exports.default = router;
 function getToken(req) {
     return __awaiter(this, void 0, void 0, function* () {
-        return (0, node_fetch_1.default)("https://sandbox.momodeveloper.mtn.com/collection/token/", {
+        return (0, node_fetch_1.default)(`${process.env.MOMO_BASE_URL}/collection/token/`, {
             method: "POST",
             headers: {
                 Authorization: `Basic ${process.env.MOMO_BASIC_AUTH}` || "",

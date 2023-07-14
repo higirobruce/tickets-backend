@@ -15,7 +15,7 @@ router.post("/requestToPay", async (req, res) => {
   let paymentPayload = req.body;
   console.log(paymentPayload);
 
-  fetch(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay`, {
+  fetch(`https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${req.session.accessToken}`,
@@ -35,17 +35,19 @@ router.post("/requestToPay", async (req, res) => {
     });
 });
 
-
-router.get("/statusOfRequest/:refId", async (req, res) => {
+router.get("/getStatusOfRequest/:refId", async (req, res) => {
   let { refId } = req.params;
-  fetch(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay/${refId}`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${req.session.accessToken}`,
-      "Ocp-Apim-Subscription-Key": process.env.MOMO_SUBSCRIPTION_KEY || "",
-      "X-Target-Environment": process.env.MOMO_ENVIRONMENT || "",
-    },
-  })
+  fetch(
+    `https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay/${refId}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${req.session.accessToken}`,
+        "Ocp-Apim-Subscription-Key": process.env.MOMO_SUBSCRIPTION_KEY || "",
+        "X-Target-Environment": process.env.MOMO_ENVIRONMENT || "",
+      },
+    }
+  )
     .then((response) => {
       if (response.ok) {
         return response.json();
@@ -61,12 +63,13 @@ router.get("/statusOfRequest/:refId", async (req, res) => {
     });
 });
 
+
 export default router;
 async function getToken(req: any) {
-  return fetch(`${process.env.MOMO_BASE_URL}/collection/token/`, {
+  return fetch("https://sandbox.momodeveloper.mtn.com/collection/token/", {
     method: "POST",
     headers: {
-      Authorization: `Basic ${process.env.MOMO_BASIC_AUTH}` || "",
+      Authorization: `Basic ${process.env.MOMO_BASIC_AUTH}`  || "",
       "X-Reference-Id": "b12d7b22-3057-4c8e-ad50-63904171d18a",
       "Ocp-Apim-Subscription-Key": process.env.MOMO_SUBSCRIPTION_KEY || "",
       "X-Target-Environment": process.env.MOMO_ENVIRONMENT || "",
@@ -76,7 +79,7 @@ async function getToken(req: any) {
       if (response.ok) {
         return response.json();
       } else {
-        console.log(response);
+        console.log(response)
         throw Error(response.statusText);
       }
     })

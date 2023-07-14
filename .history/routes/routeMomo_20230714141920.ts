@@ -27,7 +27,9 @@ router.post("/requestToPay", async (req, res) => {
     body: JSON.stringify(paymentPayload),
   })
     .then((response) => {
-      res.status(response.status).send({ message: response.statusText, refId });
+      res
+        .status(response.status)
+        .send({ statusText: response.statusText, refId, response: response });
     })
     .catch((err) => {
       console.log(err);
@@ -35,8 +37,7 @@ router.post("/requestToPay", async (req, res) => {
     });
 });
 
-
-router.get("/statusOfRequest/:refId", async (req, res) => {
+router.get("/getStatusOfRequest/:refId", async (req, res) => {
   let { refId } = req.params;
   fetch(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay/${refId}`, {
     method: "GET",
