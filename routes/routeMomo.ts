@@ -31,7 +31,6 @@ router.post("/requestToPay", async (req, res) => {
       res.status(response.status).send({ message: response.statusText, refId });
     })
     .catch((err) => {
-      console.log(err);
       res.send({ errorMessage: `${err}` });
     });
 });
@@ -61,7 +60,6 @@ router.get("/statusOfRequest/:refId", async (req, res) => {
       if (response.status === "SUCCESSFUL") {
         req.body.paymentPayload = req.session.paymentPayload;
         req.body.ticketPackage = { title, price, currency };
-        console.log(response);
         let createdTickets = await createTickets(
           "1",
           req,
@@ -97,7 +95,6 @@ async function getToken(req: any) {
       if (response.ok) {
         return response.json();
       } else {
-        console.log(response);
         throw Error(response.statusText);
       }
     })

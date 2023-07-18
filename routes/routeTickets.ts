@@ -177,7 +177,7 @@ export async function createTickets(
           number: n,
           qrCode,
           ticketPackage,
-          momoPayload
+          momoPayload,
         });
         tickets.push(ticket);
       });
@@ -185,11 +185,8 @@ export async function createTickets(
 
     let allPromises = Promise.all(tickets);
 
-    console.log('Creating....')
-
     return allPromises
       .then((v) => {
-        
         return v;
         // res.status(201).send(v);
       })
@@ -198,7 +195,6 @@ export async function createTickets(
         // res.status(500).send({ errorMessage: `${err}` });
       });
   } catch (err) {
-    console.log(err)
     throw Error(`${err}`);
     // res.status(500).send({ errorMessage: `${err}` });
   }
