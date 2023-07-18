@@ -13,7 +13,6 @@ router.post("/requestToPay", async (req, res) => {
   let refId = randomUUID();
   await getToken(req);
   let paymentPayload = req.body;
-  console.log(paymentPayload);
 
   fetch(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay`, {
     method: "POST",
@@ -35,9 +34,9 @@ router.post("/requestToPay", async (req, res) => {
     });
 });
 
-
 router.get("/statusOfRequest/:refId", async (req, res) => {
   let { refId } = req.params;
+  await getToken(req);
   fetch(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay/${refId}`, {
     method: "GET",
     headers: {
@@ -62,6 +61,7 @@ router.get("/statusOfRequest/:refId", async (req, res) => {
 });
 
 export default router;
+
 async function getToken(req: any) {
   return fetch(`${process.env.MOMO_BASE_URL}/collection/token/`, {
     method: "POST",
@@ -89,3 +89,4 @@ async function getToken(req: any) {
       return { errorMessage: `${err}` };
     });
 }
+

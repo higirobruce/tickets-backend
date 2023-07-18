@@ -24,7 +24,6 @@ router.post("/requestToPay", (req, res) => __awaiter(void 0, void 0, void 0, fun
     let refId = (0, crypto_1.randomUUID)();
     yield getToken(req);
     let paymentPayload = req.body;
-    console.log(paymentPayload);
     (0, node_fetch_1.default)(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay`, {
         method: "POST",
         headers: {
@@ -46,6 +45,7 @@ router.post("/requestToPay", (req, res) => __awaiter(void 0, void 0, void 0, fun
 }));
 router.get("/statusOfRequest/:refId", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let { refId } = req.params;
+    yield getToken(req);
     (0, node_fetch_1.default)(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay/${refId}`, {
         method: "GET",
         headers: {
