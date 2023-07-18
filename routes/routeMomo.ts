@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { Router } from "express";
 import fetch from "node-fetch";
+import { createTickets } from "./routeTickets";
 
 let router = Router();
 
@@ -13,6 +14,7 @@ router.post("/requestToPay", async (req, res) => {
   let refId = randomUUID();
   await getToken(req);
   let paymentPayload = req.body;
+  req.session.paymentPayload = paymentPayload;
 
   fetch(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay`, {
     method: "POST",
@@ -36,6 +38,7 @@ router.post("/requestToPay", async (req, res) => {
 
 router.get("/statusOfRequest/:refId", async (req, res) => {
   let { refId } = req.params;
+  let { title, price, currency } = req.query;
   await getToken(req);
   fetch(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay/${refId}`, {
     method: "GET",
@@ -52,8 +55,26 @@ router.get("/statusOfRequest/:refId", async (req, res) => {
         res.status(response.status).send(response.statusText);
       }
     })
-    .then((response) => {
-      res.send(response);
+    .then(async (response) => {
+      let tickets: any[] = [];
+
+      if (response.status === "SUCCESSFUL") {
+        req.body.paymentPayload = req.session.paymentPayload;
+        req.body.ticketPackage = { title, price, currency };
+        console.log(response);
+        let createdTickets = await createTickets(
+          "1",
+          req,
+          tickets,
+          res,
+          response
+        );
+
+        res.send(response);
+      } else {
+        console.log(response.status);
+        res.send(response);
+      }
     })
     .catch((err) => {
       res.send({ errorMessage: `${err}` });
@@ -89,4 +110,3 @@ async function getToken(req: any) {
       return { errorMessage: `${err}` };
     });
 }
-

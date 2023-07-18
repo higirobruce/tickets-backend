@@ -148,6 +148,18 @@ router.post("/", async (req, res) => {
 router.post("/batch/:quantity", async (req, res) => {
   let { quantity } = req.params;
   let tickets: any[] = [];
+  res.status(201).send(await createTickets(quantity, req, tickets, res, null));
+});
+
+export default router;
+
+export async function createTickets(
+  quantity: string,
+  req: any,
+  tickets: any[],
+  res: any,
+  momoPayload: any
+) {
   try {
     let numbers = await generateTicketNumbers(parseInt(quantity));
 
@@ -165,6 +177,7 @@ router.post("/batch/:quantity", async (req, res) => {
           number: n,
           qrCode,
           ticketPackage,
+          momoPayload
         });
         tickets.push(ticket);
       });
@@ -172,20 +185,24 @@ router.post("/batch/:quantity", async (req, res) => {
 
     let allPromises = Promise.all(tickets);
 
-    allPromises
+    console.log('Creating....')
+
+    return allPromises
       .then((v) => {
-        res.status(201).send(v);
+        
+        return v;
+        // res.status(201).send(v);
       })
       .catch((err) => {
-        res.status(500).send({ errorMessage: `${err}` });
+        throw Error(`${err}`);
+        // res.status(500).send({ errorMessage: `${err}` });
       });
   } catch (err) {
-    res.status(500).send({ errorMessage: `${err}` });
+    console.log(err)
+    throw Error(`${err}`);
+    // res.status(500).send({ errorMessage: `${err}` });
   }
-});
-
-export default router;
-
+}
 // QRCode.toFile(
 //   "/output-file-path/file.png",
 //   "Encode this text in QR code",

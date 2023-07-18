@@ -50,8 +50,8 @@ export const ticketSchema = new mongoose.Schema(
     },
     momoRef: {
       type: String,
-      required: true
-    }
+    },
+    momoPayload: {},
   },
   { timestamps: true }
 );

@@ -17,6 +17,7 @@ declare module "express-session" {
     user: any;
     accessToken: any;
     momoToken: any;
+    paymentPayload: any;
   }
 }
 // dotenv.config();
