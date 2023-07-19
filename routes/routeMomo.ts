@@ -70,7 +70,6 @@ router.get("/statusOfRequest/:refId", async (req, res) => {
 
         res.send(response);
       } else {
-        console.log(response.status);
         res.send(response);
       }
     })

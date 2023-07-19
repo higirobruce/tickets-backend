@@ -99,7 +99,7 @@ router.get("/consume/:number", async (req, res) => {
   let number = parseInt(req.params.number);
 
   let ticket = await ticketModel.findOneAndUpdate(
-    { number, status: Statuses.sold },
+    { number, status: Statuses.pending },
     { $set: { status: Statuses.consumed } },
     { new: true }
   );
@@ -116,7 +116,6 @@ router.get("/consume/:number", async (req, res) => {
 router.get("/:id", async (req, res) => {
   let { id } = req.params;
   let ticket = await getTicketById(id);
-  console.log(ticket);
   res.send(ticket);
 });
 
@@ -130,7 +129,6 @@ router.post("/", async (req, res) => {
     let qrCode = "";
     QRCode.toDataURL(qrParam, async function (err, url) {
       qrCode = url;
-      console.log(qrCode);
 
       let ticket = await createTicket({
         number,
