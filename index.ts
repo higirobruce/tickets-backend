@@ -22,10 +22,10 @@ declare module "express-session" {
 }
 // dotenv.config();
 
-const PORT =  process.env.PORT || 8081;
+const PORT = process.env.PORT || 8081;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 //Set up default mongoose connection
-// var mongoDB = `mongodb://${DB_USER}:${DB_PASSWORD}@127.0.0.1:27017/dapproval-user-service?authSource=admin`;
+// var mongoDB = `mongodb://${process.env.DB_USER}:${process.env.DB_PASSWORD}@127.0.0.1:27017/tickets?authSource=admin`;
 
 var mongoDB =
   process.env.TICKETS_DB as string;
