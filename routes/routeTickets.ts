@@ -59,7 +59,7 @@ router.get("/validate/:number", async (req, res, next) => {
 
   let ticket = await ticketModel.findOne({
     number,
-    status: { $in: [Statuses.pending, Statuses.sold] },
+    // status: { $in: [Statuses.pending, Statuses.sold] },
   });
 
   if (ticket)
@@ -67,7 +67,7 @@ router.get("/validate/:number", async (req, res, next) => {
   else
     res
       .status(404)
-      .send({ erroMessage: "Ticket not found or already validated" });
+      .send({ erroMessage: "Ticket not found or already consumed" });
 
   // res.send("Tickets can not be consumed now.");
 });
