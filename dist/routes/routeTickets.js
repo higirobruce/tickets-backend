@@ -170,9 +170,9 @@ function createTickets(quantity, req, tickets, res, momoPayload) {
                 let { ticketPackage } = req.body;
                 // let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
                 let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}`;
-                let qrParam2 = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/10001604`;
                 let qrCode = "";
                 qrcode_1.default.toDataURL(qrParam, function (err, url) {
+                    var _a;
                     qrCode = url;
                     let ticket = (0, controllerTickets_1.default)({
                         number: n,
@@ -180,7 +180,7 @@ function createTickets(quantity, req, tickets, res, momoPayload) {
                         ticketPackage,
                         momoPayload,
                     });
-                    (0, routeSMS_1.default)("+250783575582", `You can check your ticket at ${qrParam2}. You bought a ${ticketPackage.title} ticket - ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.price} ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.currency} `, "EVENTIXR");
+                    (0, routeSMS_1.default)(`+${(_a = momoPayload === null || momoPayload === void 0 ? void 0 : momoPayload.payer) === null || _a === void 0 ? void 0 : _a.partyId}`, `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParam}. Mwaguze ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.title} ticket - igura ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.price} ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.currency}`, "EVENTIXR");
                     tickets.push(ticket);
                 });
             });

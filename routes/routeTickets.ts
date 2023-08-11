@@ -167,7 +167,6 @@ export async function createTickets(
 
       // let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
       let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}`;
-      let qrParam2 = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/10001604`;
 
       let qrCode = "";
       QRCode.toDataURL(qrParam, function (err, url) {
@@ -181,8 +180,8 @@ export async function createTickets(
         });
 
         sendMessage(
-          "+250783575582",
-          `You can check your ticket at ${qrParam2}. You bought a ${ticketPackage.title} ticket - ${ticketPackage?.price} ${ticketPackage?.currency} `,
+          `+${momoPayload?.payer?.partyId}`,
+          `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParam}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
           "EVENTIXR"
         );
         tickets.push(ticket);

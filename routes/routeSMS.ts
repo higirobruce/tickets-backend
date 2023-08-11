@@ -8,7 +8,7 @@ let data = new FormData();
 // };
 
 function sendMessage(to: any, message: any, from: any) {
-    console.log('Sending sms')
+   
   data.append("username", process.env.SMS_API_USERNAME);
   data.append("to", to);
   data.append("message", message);
