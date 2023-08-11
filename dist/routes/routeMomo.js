@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const crypto_1 = require("crypto");
 const express_1 = require("express");
 const node_fetch_1 = __importDefault(require("node-fetch"));
+const routeTickets_1 = require("./routeTickets");
 let router = (0, express_1.Router)();
 router.post("/getToken", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let token = yield getToken(req);
@@ -24,6 +25,7 @@ router.post("/requestToPay", (req, res) => __awaiter(void 0, void 0, void 0, fun
     let refId = (0, crypto_1.randomUUID)();
     yield getToken(req);
     let paymentPayload = req.body;
+    req.session.paymentPayload = paymentPayload;
     (0, node_fetch_1.default)(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay`, {
         method: "POST",
         headers: {
@@ -39,12 +41,12 @@ router.post("/requestToPay", (req, res) => __awaiter(void 0, void 0, void 0, fun
         res.status(response.status).send({ message: response.statusText, refId });
     })
         .catch((err) => {
-        console.log(err);
         res.send({ errorMessage: `${err}` });
     });
 }));
 router.get("/statusOfRequest/:refId", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let { refId } = req.params;
+    let { title, price, currency } = req.query;
     yield getToken(req);
     (0, node_fetch_1.default)(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay/${refId}`, {
         method: "GET",
@@ -62,9 +64,19 @@ router.get("/statusOfRequest/:refId", (req, res) => __awaiter(void 0, void 0, vo
             res.status(response.status).send(response.statusText);
         }
     })
-        .then((response) => {
-        res.send(response);
-    })
+        .then((response) => __awaiter(void 0, void 0, void 0, function* () {
+        let tickets = [];
+        if (response.status === "SUCCESSFUL") {
+            console.log("Payment session:", req.session);
+            req.body.paymentPayload = req.session.paymentPayload;
+            req.body.ticketPackage = { title, price, currency };
+            yield (0, routeTickets_1.createTickets)("1", req, tickets, res, response);
+            res.send(response);
+        }
+        else {
+            res.send(response);
+        }
+    }))
         .catch((err) => {
         res.send({ errorMessage: `${err}` });
     });
@@ -86,7 +98,6 @@ function getToken(req) {
                 return response.json();
             }
             else {
-                console.log(response);
                 throw Error(response.statusText);
             }
         })

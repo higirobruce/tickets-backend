@@ -53,7 +53,7 @@ exports.ticketSchema = new mongoose_1.default.Schema({
     },
     momoRef: {
         type: String,
-        required: true
-    }
+    },
+    momoPayload: {},
 }, { timestamps: true });
 exports.ticketModel = mongoose_1.default.model("tickets", exports.ticketSchema);

@@ -36,12 +36,13 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.generateTicketNumbers = exports.generateTicketNumber = exports.createQrCode = void 0;
+exports.createTickets = exports.generateTicketNumbers = exports.generateTicketNumber = exports.createQrCode = void 0;
 const qrcode_1 = __importDefault(require("qrcode"));
 const express_1 = require("express");
 const tickets_1 = require("../models/tickets");
 const controllerTickets_1 = __importStar(require("../controllers/controllerTickets"));
 const events_1 = require("../models/events");
+const routeSMS_1 = __importDefault(require("./routeSMS"));
 function createQrCode(param) {
     qrcode_1.default.toDataURL(param, function (err, url) {
         return url;
@@ -89,14 +90,14 @@ router.get("/validate/:number", (req, res, next) => __awaiter(void 0, void 0, vo
     // );
     let ticket = yield tickets_1.ticketModel.findOne({
         number,
-        status: { $in: [events_1.Statuses.pending, events_1.Statuses.sold] },
+        // status: { $in: [Statuses.pending, Statuses.sold] },
     });
     if (ticket)
         res.redirect(301, `https://www.eventixr.com/tickets/${ticket === null || ticket === void 0 ? void 0 : ticket._id}`);
     else
         res
             .status(404)
-            .send({ erroMessage: "Ticket not found or already validated" });
+            .send({ erroMessage: "Ticket not found or already consumed" });
     // res.send("Tickets can not be consumed now.");
 }));
 router.get("/sell/:number", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -119,7 +120,7 @@ router.get("/sell/:number", (req, res) => __awaiter(void 0, void 0, void 0, func
 }));
 router.get("/consume/:number", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let number = parseInt(req.params.number);
-    let ticket = yield tickets_1.ticketModel.findOneAndUpdate({ number, status: events_1.Statuses.sold }, { $set: { status: events_1.Statuses.consumed } }, { new: true });
+    let ticket = yield tickets_1.ticketModel.findOneAndUpdate({ number, status: events_1.Statuses.pending }, { $set: { status: events_1.Statuses.consumed } }, { new: true });
     if (ticket)
         res.send(ticket);
     else
@@ -131,7 +132,6 @@ router.get("/consume/:number", (req, res) => __awaiter(void 0, void 0, void 0, f
 router.get("/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let { id } = req.params;
     let ticket = yield (0, controllerTickets_1.getTicketById)(id);
-    console.log(ticket);
     res.send(ticket);
 }));
 router.post("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -143,7 +143,6 @@ router.post("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         qrcode_1.default.toDataURL(qrParam, function (err, url) {
             return __awaiter(this, void 0, void 0, function* () {
                 qrCode = url;
-                console.log(qrCode);
                 let ticket = yield (0, controllerTickets_1.default)({
                     number,
                     qrCode,
@@ -160,37 +159,49 @@ router.post("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
 router.post("/batch/:quantity", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let { quantity } = req.params;
     let tickets = [];
-    try {
-        let numbers = yield generateTicketNumbers(parseInt(quantity));
-        numbers.forEach((n) => {
-            let { ticketPackage } = req.body;
-            // let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
-            let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}`;
-            let qrCode = "";
-            qrcode_1.default.toDataURL(qrParam, function (err, url) {
-                qrCode = url;
-                let ticket = (0, controllerTickets_1.default)({
-                    number: n,
-                    qrCode,
-                    ticketPackage,
-                });
-                tickets.push(ticket);
-            });
-        });
-        let allPromises = Promise.all(tickets);
-        allPromises
-            .then((v) => {
-            res.status(201).send(v);
-        })
-            .catch((err) => {
-            res.status(500).send({ errorMessage: `${err}` });
-        });
-    }
-    catch (err) {
-        res.status(500).send({ errorMessage: `${err}` });
-    }
+    res.status(201).send(yield createTickets(quantity, req, tickets, res, null));
 }));
 exports.default = router;
+function createTickets(quantity, req, tickets, res, momoPayload) {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            let numbers = yield generateTicketNumbers(parseInt(quantity));
+            numbers.forEach((n) => {
+                let { ticketPackage } = req.body;
+                // let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
+                let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}`;
+                let qrParam2 = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/10001604`;
+                let qrCode = "";
+                qrcode_1.default.toDataURL(qrParam, function (err, url) {
+                    qrCode = url;
+                    let ticket = (0, controllerTickets_1.default)({
+                        number: n,
+                        qrCode,
+                        ticketPackage,
+                        momoPayload,
+                    });
+                    (0, routeSMS_1.default)("+250783575582", `You can check your ticket at ${qrParam2}. You bought a ${ticketPackage.title} ticket - ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.price} ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.currency} `, "EVENTIXR");
+                    tickets.push(ticket);
+                });
+            });
+            let allPromises = Promise.all(tickets);
+            return allPromises
+                .then((v) => {
+                return v;
+                // res.status(201).send(v);
+            })
+                .catch((err) => {
+                throw Error(`${err}`);
+                // res.status(500).send({ errorMessage: `${err}` });
+            });
+        }
+        catch (err) {
+            throw Error(`${err}`);
+            // res.status(500).send({ errorMessage: `${err}` });
+        }
+    });
+}
+exports.createTickets = createTickets;
 // QRCode.toFile(
 //   "/output-file-path/file.png",
 //   "Encode this text in QR code",

@@ -58,9 +58,10 @@ router.get("/statusOfRequest/:refId", async (req, res) => {
       let tickets: any[] = [];
 
       if (response.status === "SUCCESSFUL") {
+        console.log("Payment session:", req.session)
         req.body.paymentPayload = req.session.paymentPayload;
         req.body.ticketPackage = { title, price, currency };
-        let createdTickets = await createTickets(
+        await createTickets(
           "1",
           req,
           tickets,
