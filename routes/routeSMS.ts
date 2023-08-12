@@ -1,38 +1,27 @@
-import axios from "axios";
-import FormData from "form-data";
-let data = new FormData();
+// Set your app credentials
+const credentials = {
+  apiKey: process.env.SMS_API_KEY,
+  username: process.env.SMS_API_USERNAME,
+};
 
-// const credentials = {
-//   apiKey: process.env.SMS_API_KEY,
-//   username: process.env.SMS_API_USERNAME,
-// };
+// Initialize the SDK
+const AfricasTalking = require("africastalking")(credentials);
+
+// Get the SMS service
+const sms = AfricasTalking.SMS;
 
 function sendMessage(to: any, message: any, from: any) {
-   
-  data.append("username", process.env.SMS_API_USERNAME);
-  data.append("to", to);
-  data.append("message", message);
-//   data.append("from", from);
-
-  let config = {
-    method: "post",
-    maxBodyLength: Infinity,
-    url: "https://api.africastalking.com/version1/messaging",
-    headers: {
-      apiKey: process.env.SMS_API_KEY,
-      ...data.getHeaders(),
-    },
-    data: data,
+  const options = {
+    // Set the numbers you want to send to in international format
+    to,
+    // Set your message
+    message,
+    // Set your shortCode or senderId
+    // from: "XXYYZZ",
   };
 
-  axios
-    .request(config)
-    .then((response) => {
-      console.log(JSON.stringify(response.data));
-    })
-    .catch((error) => {
-      console.log(error);
-    });
+  // That’s it, hit send and we’ll take care of the rest
+  sms.send(options).then(console.log).catch(console.log);
 }
 
 export default sendMessage;

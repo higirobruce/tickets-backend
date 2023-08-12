@@ -175,6 +175,7 @@ router.post("/batch/:quantity", async (req, res) => {
   res.status(201).send(await createTickets(quantity, req, tickets, res, null));
 });
 
+
 export default router;
 
 export async function createTickets(
