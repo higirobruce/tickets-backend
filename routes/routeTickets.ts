@@ -191,7 +191,8 @@ export async function createTickets(
       let { ticketPackage } = req.body;
 
       // let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
-      let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}?showOnly=1`;
+      let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}`;
+      let qrParamShowOnly = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}?showOnly=1`;
 
       let qrCode = "";
       QRCode.toDataURL(qrParam, function (err, url) {
@@ -206,7 +207,7 @@ export async function createTickets(
 
         sendMessage(
           `+${momoPayload?.payer?.partyId}`,
-          `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParam}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
+          `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
           "EVENTIXR"
         );
         tickets.push(ticket);
