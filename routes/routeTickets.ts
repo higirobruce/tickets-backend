@@ -49,7 +49,7 @@ router.get("/", async (req, res) => {
   res.send(tickets);
 });
 
-router.get("/validate/:number", async (req, res, next) => {
+router.get("/show/:number", async (req, res, next) => {
   let number = req.params.number;
 
   // let ticket = await ticketModel.findOneAndUpdate(
@@ -64,8 +64,39 @@ router.get("/validate/:number", async (req, res, next) => {
   });
 
   if (ticket)
-    res.redirect(301, `https://www.eventixr.com/tickets/${ticket?._id}`);
+    res.redirect(
+      301,
+      `https://www.eventixr.com/tickets/${ticket?._id}?showOnly=1`
+    );
   else
+    res
+      .status(404)
+      .send({ erroMessage: "Ticket not found or already consumed" });
+
+  // res.send("Tickets can not be consumed now.");
+});
+
+router.get("/validate/:number", async (req, res, next) => {
+  let number = req.params.number;
+  let { showOnly } = req.query;
+
+  // let ticket = await ticketModel.findOneAndUpdate(
+  //   { number, status: Statuses.sold },
+  //   { $set: { status: Statuses.consumed } },
+  //   { new: true }
+  // );
+
+  let ticket = await ticketModel.findOne({
+    number,
+    // status: { $in: [Statuses.pending, Statuses.sold] },
+  });
+
+  if (ticket) {
+    if (!showOnly)
+      res.redirect(301, `https://www.eventixr.com/tickets/${ticket?._id}`);
+    else 
+    res.redirect(301, `https://www.eventixr.com/tickets/${ticket?._id}?showOnly=${showOnly}`);
+  } else
     res
       .status(404)
       .send({ erroMessage: "Ticket not found or already consumed" });
@@ -77,22 +108,16 @@ router.get("/sell/:number", async (req, res) => {
   let number = parseInt(req.params.number);
   let { momoRef } = req.query;
 
-  let ticketWithSameRef = await ticketModel.findOne({ momoRef });
+  let ticket = await ticketModel.findOneAndUpdate(
+    { number, status: Statuses.pending },
+    { $set: { status: Statuses.sold, momoRef } },
+    { new: true }
+  );
 
-  if (ticketWithSameRef) {
-    res.statusMessage = "Momo Reference already exists";
-    res.status(500).send({ erroMessage: "Momo Reference already exists" });
-  } else {
-    let ticket = await ticketModel.findOneAndUpdate(
-      { number, status: Statuses.pending },
-      { $set: { status: Statuses.sold, momoRef } },
-      { new: true }
-    );
-    if (ticket) res.send(ticket);
-    else {
-      res.statusMessage = "Ticket not found or already sold";
-      res.status(404).send({ erroMessage: "Ticket not found or already sold" });
-    }
+  if (ticket) res.send(ticket);
+  else {
+    res.statusMessage = "Ticket not found or already sold";
+    res.status(404).send({ erroMessage: "Ticket not found or already sold" });
   }
 });
 
@@ -166,7 +191,7 @@ export async function createTickets(
       let { ticketPackage } = req.body;
 
       // let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
-      let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}`;
+      let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}?showOnly=1`;
 
       let qrCode = "";
       QRCode.toDataURL(qrParam, function (err, url) {

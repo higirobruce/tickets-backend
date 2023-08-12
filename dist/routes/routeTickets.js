@@ -81,7 +81,7 @@ router.get("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let tickets = yield (0, controllerTickets_1.getAllTickets)();
     res.send(tickets);
 }));
-router.get("/validate/:number", (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+router.get("/show/:number", (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     let number = req.params.number;
     // let ticket = await ticketModel.findOneAndUpdate(
     //   { number, status: Statuses.sold },
@@ -93,7 +93,31 @@ router.get("/validate/:number", (req, res, next) => __awaiter(void 0, void 0, vo
         // status: { $in: [Statuses.pending, Statuses.sold] },
     });
     if (ticket)
-        res.redirect(301, `https://www.eventixr.com/tickets/${ticket === null || ticket === void 0 ? void 0 : ticket._id}`);
+        res.redirect(301, `https://www.eventixr.com/tickets/${ticket === null || ticket === void 0 ? void 0 : ticket._id}?showOnly=1`);
+    else
+        res
+            .status(404)
+            .send({ erroMessage: "Ticket not found or already consumed" });
+    // res.send("Tickets can not be consumed now.");
+}));
+router.get("/validate/:number", (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    let number = req.params.number;
+    let { showOnly } = req.query;
+    // let ticket = await ticketModel.findOneAndUpdate(
+    //   { number, status: Statuses.sold },
+    //   { $set: { status: Statuses.consumed } },
+    //   { new: true }
+    // );
+    let ticket = yield tickets_1.ticketModel.findOne({
+        number,
+        // status: { $in: [Statuses.pending, Statuses.sold] },
+    });
+    if (ticket) {
+        if (!showOnly)
+            res.redirect(301, `https://www.eventixr.com/tickets/${ticket === null || ticket === void 0 ? void 0 : ticket._id}`);
+        else
+            res.redirect(301, `https://www.eventixr.com/tickets/${ticket === null || ticket === void 0 ? void 0 : ticket._id}?showOnly=${showOnly}`);
+    }
     else
         res
             .status(404)
@@ -103,19 +127,12 @@ router.get("/validate/:number", (req, res, next) => __awaiter(void 0, void 0, vo
 router.get("/sell/:number", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let number = parseInt(req.params.number);
     let { momoRef } = req.query;
-    let ticketWithSameRef = yield tickets_1.ticketModel.findOne({ momoRef });
-    if (ticketWithSameRef) {
-        res.statusMessage = "Momo Reference already exists";
-        res.status(500).send({ erroMessage: "Momo Reference already exists" });
-    }
+    let ticket = yield tickets_1.ticketModel.findOneAndUpdate({ number, status: events_1.Statuses.pending }, { $set: { status: events_1.Statuses.sold, momoRef } }, { new: true });
+    if (ticket)
+        res.send(ticket);
     else {
-        let ticket = yield tickets_1.ticketModel.findOneAndUpdate({ number, status: events_1.Statuses.pending }, { $set: { status: events_1.Statuses.sold, momoRef } }, { new: true });
-        if (ticket)
-            res.send(ticket);
-        else {
-            res.statusMessage = "Ticket not found or already sold";
-            res.status(404).send({ erroMessage: "Ticket not found or already sold" });
-        }
+        res.statusMessage = "Ticket not found or already sold";
+        res.status(404).send({ erroMessage: "Ticket not found or already sold" });
     }
 }));
 router.get("/consume/:number", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
@@ -169,7 +186,7 @@ function createTickets(quantity, req, tickets, res, momoPayload) {
             numbers.forEach((n) => {
                 let { ticketPackage } = req.body;
                 // let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
-                let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}`;
+                let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}?showOnly=1`;
                 let qrCode = "";
                 qrcode_1.default.toDataURL(qrParam, function (err, url) {
                     var _a;
