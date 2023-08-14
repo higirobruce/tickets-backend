@@ -3,7 +3,7 @@
 import QRCode from "qrcode";
 
 import { Router } from "express";
-import { ticketModel } from "../models/tickets";
+import { packageSchema, ticketModel } from "../models/tickets";
 import createTicket, {
   getAllTickets,
   getTicketById,
@@ -11,6 +11,7 @@ import createTicket, {
 import { Statuses } from "../models/events";
 import { validate } from "node-cron";
 import sendMessage from "./routeSMS";
+import mongoose from "mongoose";
 export function createQrCode(param: any) {
   QRCode.toDataURL(param, function (err, url) {
     return url;
@@ -94,8 +95,11 @@ router.get("/validate/:number", async (req, res, next) => {
   if (ticket) {
     if (!showOnly)
       res.redirect(301, `https://www.eventixr.com/tickets/${ticket?._id}`);
-    else 
-    res.redirect(301, `https://www.eventixr.com/tickets/${ticket?._id}?showOnly=${showOnly}`);
+    else
+      res.redirect(
+        301,
+        `https://www.eventixr.com/tickets/${ticket?._id}?showOnly=${showOnly}`
+      );
   } else
     res
       .status(404)
@@ -139,6 +143,16 @@ router.get("/consume/:number", async (req, res) => {
   // res.send("Tickets can not be consumed now.");
 });
 
+router.get("/summary", async (req, res) => {
+  try {
+    let summary = await getTicketsSummary();
+
+    res.send(summary);
+  } catch (err) {
+    res.status(500).send({ error: `${err}` });
+  }
+});
+
 router.get("/:id", async (req, res) => {
   let { id } = req.params;
   let ticket = await getTicketById(id);
@@ -175,6 +189,13 @@ router.post("/batch/:quantity", async (req, res) => {
   res.status(201).send(await createTickets(quantity, req, tickets, res, null));
 });
 
+router.post("/fromPayload", async (req, res) => {
+  let { ticketPackage, momoPayload, quantity } = req.body;
+
+  res.send(
+    await createTicketsFromPayload(quantity, ticketPackage, [], "", momoPayload)
+  );
+});
 
 export default router;
 
@@ -230,6 +251,88 @@ export async function createTickets(
     throw Error(`${err}`);
     // res.status(500).send({ errorMessage: `${err}` });
   }
+}
+
+export async function createTicketsFromPayload(
+  quantity: string,
+  ticketPackage: any,
+  tickets: any[],
+  res: any,
+  momoPayload: any
+) {
+  ticketPackage._id = new mongoose.Types.ObjectId(ticketPackage._id);
+  console.log(ticketPackage);
+  try {
+    let numbers = await generateTicketNumbers(parseInt(quantity));
+
+    numbers.forEach((n) => {
+      // let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
+      let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}`;
+      let qrParamShowOnly = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}?showOnly=1`;
+
+      let qrCode = "";
+      QRCode.toDataURL(qrParam, function (err, url) {
+        qrCode = url;
+
+        let ticket = createTicket({
+          number: n,
+          qrCode,
+          ticketPackage,
+          momoPayload,
+        });
+        sendMessage(
+          `+${momoPayload?.payer?.partyId}`,
+          `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
+          "EVENTIXR"
+        );
+        tickets.push(ticket);
+      });
+    });
+
+    let allPromises = Promise.all(tickets);
+
+    return allPromises
+      .then((v) => {
+        return v;
+        // res.status(201).send(v);
+      })
+      .catch((err) => {
+        throw Error(`${err}`);
+        // res.status(500).send({ errorMessage: `${err}` });
+      });
+  } catch (err) {
+    throw Error(`${err}`);
+    // res.status(500).send({ errorMessage: `${err}` });
+  }
+}
+
+export async function getTicketsSummary() {
+  let pipeline = [
+    {
+      $match: {
+        createdAt: {
+          $gte: new Date("Fri, 13 Aug 2023 00:00:00 GMT"),
+        },
+      },
+    },
+    {
+      $group: {
+        _id: "$ticketPackage.title",
+        count: {
+          $count: {},
+        },
+        total: {
+          $sum: {
+            $toInt: "$momoPayload.amount",
+          },
+        },
+      },
+    },
+  ];
+
+  let data = await ticketModel.aggregate(pipeline).sort({ _id: -1 });
+
+  return data;
 }
 // QRCode.toFile(
 //   "/output-file-path/file.png",

@@ -36,13 +36,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createTickets = exports.generateTicketNumbers = exports.generateTicketNumber = exports.createQrCode = void 0;
+exports.getTicketsSummary = exports.createTicketsFromPayload = exports.createTickets = exports.generateTicketNumbers = exports.generateTicketNumber = exports.createQrCode = void 0;
 const qrcode_1 = __importDefault(require("qrcode"));
 const express_1 = require("express");
 const tickets_1 = require("../models/tickets");
 const controllerTickets_1 = __importStar(require("../controllers/controllerTickets"));
 const events_1 = require("../models/events");
 const routeSMS_1 = __importDefault(require("./routeSMS"));
+const mongoose_1 = __importDefault(require("mongoose"));
 function createQrCode(param) {
     qrcode_1.default.toDataURL(param, function (err, url) {
         return url;
@@ -146,6 +147,15 @@ router.get("/consume/:number", (req, res) => __awaiter(void 0, void 0, void 0, f
             .send({ erroMessage: "Ticket not found or already consumed" });
     // res.send("Tickets can not be consumed now.");
 }));
+router.get("/summary", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        let summary = yield getTicketsSummary();
+        res.send(summary);
+    }
+    catch (err) {
+        res.status(500).send({ error: `${err}` });
+    }
+}));
 router.get("/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let { id } = req.params;
     let ticket = yield (0, controllerTickets_1.getTicketById)(id);
@@ -177,6 +187,10 @@ router.post("/batch/:quantity", (req, res) => __awaiter(void 0, void 0, void 0, 
     let { quantity } = req.params;
     let tickets = [];
     res.status(201).send(yield createTickets(quantity, req, tickets, res, null));
+}));
+router.post("/fromPayload", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    let { ticketPackage, momoPayload, quantity } = req.body;
+    res.send(yield createTicketsFromPayload(quantity, ticketPackage, [], "", momoPayload));
 }));
 exports.default = router;
 function createTickets(quantity, req, tickets, res, momoPayload) {
@@ -220,6 +234,77 @@ function createTickets(quantity, req, tickets, res, momoPayload) {
     });
 }
 exports.createTickets = createTickets;
+function createTicketsFromPayload(quantity, ticketPackage, tickets, res, momoPayload) {
+    return __awaiter(this, void 0, void 0, function* () {
+        ticketPackage._id = new mongoose_1.default.Types.ObjectId(ticketPackage._id);
+        console.log(ticketPackage);
+        try {
+            let numbers = yield generateTicketNumbers(parseInt(quantity));
+            numbers.forEach((n) => {
+                // let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
+                let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}`;
+                let qrParamShowOnly = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}?showOnly=1`;
+                let qrCode = "";
+                qrcode_1.default.toDataURL(qrParam, function (err, url) {
+                    var _a;
+                    qrCode = url;
+                    let ticket = (0, controllerTickets_1.default)({
+                        number: n,
+                        qrCode,
+                        ticketPackage,
+                        momoPayload,
+                    });
+                    (0, routeSMS_1.default)(`+${(_a = momoPayload === null || momoPayload === void 0 ? void 0 : momoPayload.payer) === null || _a === void 0 ? void 0 : _a.partyId}`, `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.title} ticket - igura ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.price} ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.currency}`, "EVENTIXR");
+                    tickets.push(ticket);
+                });
+            });
+            let allPromises = Promise.all(tickets);
+            return allPromises
+                .then((v) => {
+                return v;
+                // res.status(201).send(v);
+            })
+                .catch((err) => {
+                throw Error(`${err}`);
+                // res.status(500).send({ errorMessage: `${err}` });
+            });
+        }
+        catch (err) {
+            throw Error(`${err}`);
+            // res.status(500).send({ errorMessage: `${err}` });
+        }
+    });
+}
+exports.createTicketsFromPayload = createTicketsFromPayload;
+function getTicketsSummary() {
+    return __awaiter(this, void 0, void 0, function* () {
+        let pipeline = [
+            {
+                $match: {
+                    createdAt: {
+                        $gte: new Date("Fri, 13 Aug 2023 00:00:00 GMT"),
+                    },
+                },
+            },
+            {
+                $group: {
+                    _id: "$ticketPackage.title",
+                    count: {
+                        $count: {},
+                    },
+                    total: {
+                        $sum: {
+                            $toInt: "$momoPayload.amount",
+                        },
+                    },
+                },
+            },
+        ];
+        let data = yield tickets_1.ticketModel.aggregate(pipeline).sort({ _id: -1 });
+        return data;
+    });
+}
+exports.getTicketsSummary = getTicketsSummary;
 // QRCode.toFile(
 //   "/output-file-path/file.png",
 //   "Encode this text in QR code",
