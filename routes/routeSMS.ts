@@ -21,7 +21,23 @@ function sendMessage(to: any, message: any, from: any) {
   };
 
   // That’s it, hit send and we’ll take care of the rest
-  sms.send(options).then(console.log).catch(console.log);
+  sms
+    .send(
+      options
+    ) /* The code `then(console.log).catch((err:any)=>{ console.log(err)
+  sms.send(options) });` is handling the promise returned by the `sms.send()`
+  method. */
+    .then(console.log)
+    .catch((err: any) => {
+      console.log(err);
+      sms
+        .send(options)
+        .then(console.log)
+        .catch((err2: any) => {
+          console.log(err2);
+          sms.send(options);
+        });
+    });
 }
 
 export default sendMessage;
