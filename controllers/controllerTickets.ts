@@ -3,7 +3,7 @@ import { ticketModel } from "../models/tickets";
 
 export async function getAllTickets() {
   try {
-    let tickets = await ticketModel.find({});
+    let tickets = await ticketModel.find({event:"64a72d14ef9fc1c25561e7e9"});
     return tickets;
   } catch (err) {
     console.log(err);

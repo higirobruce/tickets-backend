@@ -17,7 +17,7 @@ function sendMessage(to: any, message: any, from: any) {
     // Set your message
     message,
     // Set your shortCode or senderId
-    // from: "XXYYZZ",
+    // from: "Shapeherd",
   };
 
   // That’s it, hit send and we’ll take care of the rest

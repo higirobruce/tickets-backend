@@ -54,6 +54,10 @@ exports.ticketSchema = new mongoose_1.default.Schema({
     momoRef: {
         type: String,
     },
+    event: {
+        type: mongoose_1.default.Types.ObjectId,
+        ref: "events",
+    },
     momoPayload: {},
 }, { timestamps: true });
 exports.ticketModel = mongoose_1.default.model("tickets", exports.ticketSchema);

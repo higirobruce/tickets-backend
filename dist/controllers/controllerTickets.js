@@ -14,7 +14,7 @@ const tickets_1 = require("../models/tickets");
 function getAllTickets() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            let tickets = yield tickets_1.ticketModel.find({});
+            let tickets = yield tickets_1.ticketModel.find({ event: "64a72d14ef9fc1c25561e7e9" });
             return tickets;
         }
         catch (err) {

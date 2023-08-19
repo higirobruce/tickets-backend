@@ -210,7 +210,7 @@ export async function createTickets(
     let numbers = await generateTicketNumbers(parseInt(quantity));
 
     numbers.forEach((n) => {
-      let { ticketPackage } = req.body;
+      let { ticketPackage, event } = req.body;
 
       // let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
       let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}`;
@@ -225,13 +225,14 @@ export async function createTickets(
           qrCode,
           ticketPackage,
           momoPayload,
+          event
         });
 
-        sendMessage(
-          `+${momoPayload?.payer?.partyId}`,
-          `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
-          "EVENTIXR"
-        );
+        // sendMessage(
+        //   `+${momoPayload?.payer?.partyId}`,
+        //   `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
+        //   "EVENTIXR"
+        // );
         tickets.push(ticket);
       });
     });
@@ -313,6 +314,7 @@ export async function getTicketsSummary() {
         createdAt: {
           $gte: new Date("Fri, 13 Aug 2023 00:00:00 GMT"),
         },
+        momoPayload:{$ne:null}
       },
     },
     {

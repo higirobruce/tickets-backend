@@ -198,21 +198,25 @@ function createTickets(quantity, req, tickets, res, momoPayload) {
         try {
             let numbers = yield generateTicketNumbers(parseInt(quantity));
             numbers.forEach((n) => {
-                let { ticketPackage } = req.body;
+                let { ticketPackage, event } = req.body;
                 // let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
                 let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}`;
                 let qrParamShowOnly = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}?showOnly=1`;
                 let qrCode = "";
                 qrcode_1.default.toDataURL(qrParam, function (err, url) {
-                    var _a;
                     qrCode = url;
                     let ticket = (0, controllerTickets_1.default)({
                         number: n,
                         qrCode,
                         ticketPackage,
                         momoPayload,
+                        event
                     });
-                    (0, routeSMS_1.default)(`+${(_a = momoPayload === null || momoPayload === void 0 ? void 0 : momoPayload.payer) === null || _a === void 0 ? void 0 : _a.partyId}`, `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.title} ticket - igura ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.price} ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.currency}`, "EVENTIXR");
+                    // sendMessage(
+                    //   `+${momoPayload?.payer?.partyId}`,
+                    //   `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
+                    //   "EVENTIXR"
+                    // );
                     tickets.push(ticket);
                 });
             });
@@ -284,6 +288,7 @@ function getTicketsSummary() {
                     createdAt: {
                         $gte: new Date("Fri, 13 Aug 2023 00:00:00 GMT"),
                     },
+                    momoPayload: { $ne: null }
                 },
             },
             {
