@@ -228,11 +228,11 @@ export async function createTickets(
           event
         });
 
-        // sendMessage(
-        //   `+${momoPayload?.payer?.partyId}`,
-        //   `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
-        //   "EVENTIXR"
-        // );
+        sendMessage(
+          `+${momoPayload?.payer?.partyId}`,
+          `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
+          "EVENTIXR"
+        );
         tickets.push(ticket);
       });
     });
