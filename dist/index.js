@@ -16,7 +16,6 @@ const routeUsers_1 = __importDefault(require("./routes/routeUsers"));
 const routeEvents_1 = __importDefault(require("./routes/routeEvents"));
 const routeMomo_1 = __importDefault(require("./routes/routeMomo"));
 const routeTickets_1 = __importDefault(require("./routes/routeTickets"));
-const users_1 = require("./services/users");
 // dotenv.config();
 const PORT = 8081;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -93,6 +92,5 @@ app.use("/events", routeEvents_1.default);
 app.use("/momo", routeMomo_1.default);
 app.use("/tickets", routeTickets_1.default);
 app.listen(PORT, () => {
-    console.log((0, users_1.hashPassword)('password'));
     console.log(`⚡️[server]: Server is running at ${PORT}`);
 });

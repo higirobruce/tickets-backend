@@ -58,6 +58,10 @@ exports.ticketSchema = new mongoose_1.default.Schema({
         type: mongoose_1.default.Types.ObjectId,
         ref: "events",
     },
+    consumedBy: {
+        type: mongoose_1.default.Types.ObjectId,
+        ref: "users",
+    },
     momoPayload: {},
 }, { timestamps: true });
 exports.ticketModel = mongoose_1.default.model("tickets", exports.ticketSchema);

@@ -138,7 +138,9 @@ router.get("/sell/:number", (req, res) => __awaiter(void 0, void 0, void 0, func
 }));
 router.get("/consume/:number", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let number = parseInt(req.params.number);
-    let ticket = yield tickets_1.ticketModel.findOneAndUpdate({ number, status: events_1.Statuses.pending }, { $set: { status: events_1.Statuses.consumed } }, { new: true });
+    let { doneBy } = req.query;
+    console.log(req.query);
+    let ticket = yield tickets_1.ticketModel.findOneAndUpdate({ number, status: events_1.Statuses.pending }, { $set: { status: events_1.Statuses.consumed, consumedBy: doneBy } }, { new: true });
     if (ticket)
         res.send(ticket);
     else
@@ -148,6 +150,7 @@ router.get("/consume/:number", (req, res) => __awaiter(void 0, void 0, void 0, f
     // res.send("Tickets can not be consumed now.");
 }));
 router.get("/summary", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    console.log(req.session.user);
     try {
         let summary = yield getTicketsSummary();
         res.send(summary);
@@ -211,7 +214,7 @@ function createTickets(quantity, req, tickets, res, momoPayload) {
                         qrCode,
                         ticketPackage,
                         momoPayload,
-                        event
+                        event,
                     });
                     (0, routeSMS_1.default)(`+${(_a = momoPayload === null || momoPayload === void 0 ? void 0 : momoPayload.payer) === null || _a === void 0 ? void 0 : _a.partyId}`, `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.title} ticket - igura ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.price} ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.currency}`, "EVENTIXR");
                     tickets.push(ticket);
@@ -285,7 +288,7 @@ function getTicketsSummary() {
                     createdAt: {
                         $gte: new Date("Fri, 13 Aug 2023 00:00:00 GMT"),
                     },
-                    momoPayload: { $ne: null }
+                    momoPayload: { $ne: null },
                 },
             },
             {

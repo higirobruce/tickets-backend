@@ -55,7 +55,10 @@ export const ticketSchema = new mongoose.Schema(
       type: mongoose.Types.ObjectId,
       ref: "events",
     },
-    
+    consumedBy:{
+      type: mongoose.Types.ObjectId,
+      ref: "users",
+    },
     momoPayload: {},
   },
   { timestamps: true }

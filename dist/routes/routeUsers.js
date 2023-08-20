@@ -23,8 +23,7 @@ router.get("/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () 
 router.post("/login", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let { username, password } = req.body;
     let user = yield (0, controllerUsers_1.getUser)(username, password);
-    if (user)
-        req.session.user = user === null || user === void 0 ? void 0 : user._id;
+    req.session.user = user;
     res.send(user);
 }));
 router.post("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {

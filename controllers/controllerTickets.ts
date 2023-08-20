@@ -21,6 +21,16 @@ export async function getTicketById(id: String) {
   }
 }
 
+export async function updateTicket(id: String, updates: any) {
+  try {
+    let ticket = await ticketModel.findByIdAndUpdate(id, {$set: updates})
+    return ticket;
+  } catch (err) {
+    console.log(err);
+    throw Error(`${err}`);
+  }
+}
+
 export default async function createTicket(ticketDoc: any) {
   try {
     let newTicket = new ticketModel(ticketDoc);
@@ -31,3 +41,6 @@ export default async function createTicket(ticketDoc: any) {
     throw Error(`${err}`);
   }
 }
+
+
+

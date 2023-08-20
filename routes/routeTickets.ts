@@ -127,10 +127,12 @@ router.get("/sell/:number", async (req, res) => {
 
 router.get("/consume/:number", async (req, res) => {
   let number = parseInt(req.params.number);
+  let { doneBy } = req.query;
+  console.log(req.query);
 
   let ticket = await ticketModel.findOneAndUpdate(
     { number, status: Statuses.pending },
-    { $set: { status: Statuses.consumed } },
+    { $set: { status: Statuses.consumed, consumedBy: doneBy } },
     { new: true }
   );
 
@@ -144,6 +146,7 @@ router.get("/consume/:number", async (req, res) => {
 });
 
 router.get("/summary", async (req, res) => {
+  console.log(req.session.user);
   try {
     let summary = await getTicketsSummary();
 
@@ -218,14 +221,6 @@ export async function createTickets(
 
       let qrCode = "";
       QRCode.toDataURL(qrParam, function (err, url) {
-        if (err) {
-          sendMessage(
-            `+250788317413`,
-            `Qr code generation failed, check for +${momoPayload?.payer?.partyId}`,
-            "EVENTIXR"
-          );
-        }
-
         qrCode = url;
 
         let ticket = createTicket({

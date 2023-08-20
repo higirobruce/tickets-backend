@@ -27,8 +27,11 @@ function sendMessage(to: any, message: any, from: any) {
     ) /* The code `then(console.log).catch((err:any)=>{ console.log(err)
   sms.send(options) });` is handling the promise returned by the `sms.send()`
   method. */
-    .then(console.log)
+    .then(()=>{
+      //update ticket mention sms sent
+    })
     .catch((err: any) => {
+      //update ticket mention sms not sent
       sms.send({
         to: "+250788317413",
         message: `Sending sms failed for ${to}`,

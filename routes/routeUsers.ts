@@ -22,7 +22,7 @@ router.get("/:id", async (req, res) => {
 router.post("/login", async (req, res) => {
   let { username, password } = req.body;
   let user = await getUser(username, password);
-  if (user) req.session.user = user?._id;
+  req.session.user = user;
   res.send(user);
 });
 
