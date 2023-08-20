@@ -218,6 +218,14 @@ export async function createTickets(
 
       let qrCode = "";
       QRCode.toDataURL(qrParam, function (err, url) {
+        if (err) {
+          sendMessage(
+            `+250788317413`,
+            `Qr code generation failed, check for +${momoPayload?.payer?.partyId}`,
+            "EVENTIXR"
+          );
+        }
+
         qrCode = url;
 
         let ticket = createTicket({
@@ -225,7 +233,7 @@ export async function createTickets(
           qrCode,
           ticketPackage,
           momoPayload,
-          event
+          event,
         });
 
         sendMessage(
@@ -314,7 +322,7 @@ export async function getTicketsSummary() {
         createdAt: {
           $gte: new Date("Fri, 13 Aug 2023 00:00:00 GMT"),
         },
-        momoPayload:{$ne:null}
+        momoPayload: { $ne: null },
       },
     },
     {

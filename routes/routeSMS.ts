@@ -29,14 +29,10 @@ function sendMessage(to: any, message: any, from: any) {
   method. */
     .then(console.log)
     .catch((err: any) => {
-      console.log(err);
-      sms
-        .send(options)
-        .then(console.log)
-        .catch((err2: any) => {
-          console.log(err2);
-          sms.send(options);
-        });
+      sms.send({
+        to: "+250788317413",
+        message: `Sending sms failed for ${to}`,
+      });
     });
 }
 

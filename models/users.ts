@@ -5,6 +5,7 @@ export const phoneNumberSchema = new mongoose.Schema({
   phone: String,
 });
 
+
 export const userSchema = new mongoose.Schema(
   {
     lastName: {
@@ -17,6 +18,8 @@ export const userSchema = new mongoose.Schema(
     email: {
       type: String,
       required: true,
+      unique: true,
+      dropDups: true,
     },
     otp: {
       type: String,

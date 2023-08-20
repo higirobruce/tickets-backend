@@ -9,8 +9,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getAllUsers = void 0;
+exports.saveUser = exports.getUserById = exports.getUser = exports.getAllUsers = void 0;
 const users_1 = require("../models/users");
+const users_2 = require("../services/users");
 function getAllUsers() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
@@ -23,3 +24,45 @@ function getAllUsers() {
     });
 }
 exports.getAllUsers = getAllUsers;
+function getUser(username, password) {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            let user = yield users_1.userModel.findOne({ email: username });
+            if ((0, users_2.validPassword)(password, user === null || user === void 0 ? void 0 : user.password)) {
+                return user;
+            }
+            else {
+                return false;
+            }
+        }
+        catch (err) {
+            throw Error(`${err}`);
+        }
+    });
+}
+exports.getUser = getUser;
+function getUserById(id) {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            let users = yield users_1.userModel.findById(id);
+            return users;
+        }
+        catch (err) {
+            throw Error(`${err}`);
+        }
+    });
+}
+exports.getUserById = getUserById;
+function saveUser(user) {
+    return __awaiter(this, void 0, void 0, function* () {
+        try {
+            let nUser = new users_1.userModel(user);
+            let savedUser = yield nUser.save();
+            return savedUser;
+        }
+        catch (err) {
+            throw Error(`${err}`);
+        }
+    });
+}
+exports.saveUser = saveUser;

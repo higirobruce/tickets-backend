@@ -11,8 +11,32 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const controllerUsers_1 = require("../controllers/controllerUsers");
+const users_1 = require("../services/users");
 let router = (0, express_1.Router)();
 router.get("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     res.send(yield (0, controllerUsers_1.getAllUsers)());
+}));
+router.get("/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    let { id } = req.params;
+    res.send(yield (0, controllerUsers_1.getUserById)(id));
+}));
+router.post("/login", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    let { username, password } = req.body;
+    let user = yield (0, controllerUsers_1.getUser)(username, password);
+    if (user)
+        req.session.user = user === null || user === void 0 ? void 0 : user._id;
+    res.send(user);
+}));
+router.post("/", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    console.log("helllooooo");
+    let { lastName, firstName, email, password, phoneNumber } = req.body;
+    let hashedPassword = (0, users_1.hashPassword)(password);
+    res.send(yield (0, controllerUsers_1.saveUser)({
+        lastName,
+        firstName,
+        email,
+        password: hashedPassword,
+        phoneNumber,
+    }));
 }));
 exports.default = router;

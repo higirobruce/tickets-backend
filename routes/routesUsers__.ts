@@ -1,6 +1,10 @@
-import mongoose from "mongoose";
 import { Router } from "express";
 import { ensureUserAuthorized } from "..";
+import {
+  createTicket,
+  getAllEvents,
+  getEventById,
+} from "../controllers/controllerEvents";
 import {
   getAllUsers,
   getUser,
@@ -8,10 +12,16 @@ import {
   saveUser,
 } from "../controllers/controllerUsers";
 import { hashPassword } from "../services/users";
+
 let router = Router();
 
 router.get("/", async (req, res) => {
   res.send(await getAllUsers());
+});
+
+router.post("/login", async (req, res) => {
+  let { username, password } = req.body;
+  res.send(await getUser(username, password));
 });
 
 router.get("/:id", async (req, res) => {
@@ -19,15 +29,8 @@ router.get("/:id", async (req, res) => {
   res.send(await getUserById(id));
 });
 
-router.post("/login", async (req, res) => {
-  let { username, password } = req.body;
-  let user = await getUser(username, password);
-  if (user) req.session.user = user?._id;
-  res.send(user);
-});
-
 router.post("/", async (req, res) => {
-  console.log("helllooooo");
+  console.log('helllooooo')
   let { lastName, firstName, email, password, phoneNumber } = req.body;
   let hashedPassword = hashPassword(password);
 
@@ -36,7 +39,7 @@ router.post("/", async (req, res) => {
       lastName,
       firstName,
       email,
-      password: hashedPassword,
+      hashedPassword,
       phoneNumber,
     })
   );
