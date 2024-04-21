@@ -11,9 +11,6 @@ import usersRoute from "./routes/routeUsers";
 import eventsRoute from "./routes/routeEvents";
 import momoRoute from "./routes/routeMomo";
 import ticketsRoute from "./routes/routeTickets";
-import sendMessage from "./routes/routeSMS";
-import { twilioSend } from "./services/twilioSms";
-
 declare module "express-session" {
   export interface SessionData {
     user: any;

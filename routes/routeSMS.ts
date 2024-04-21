@@ -11,6 +11,7 @@ const AfricasTalking = require("africastalking")(credentials);
 const sms = AfricasTalking.SMS;
 
 function sendMessage(to: any, message: any, from: any) {
+  
   console.log('sending..')
   const options = {
     // Set the numbers you want to send to in international format
