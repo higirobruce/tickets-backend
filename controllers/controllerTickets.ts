@@ -3,7 +3,7 @@ import { ticketModel } from "../models/tickets";
 
 export async function getAllTickets() {
   try {
-    let tickets = await ticketModel.find({"ticketPackage.title":"Invitation"});
+    let tickets = await ticketModel.find({event:"64a72d14ef9fc1c25561e7e9"});
     return tickets;
   } catch (err) {
     console.log(err);
@@ -14,16 +14,6 @@ export async function getAllTickets() {
 export async function getTicketById(id: String) {
   try {
     let ticket = await ticketModel.findById(id)
-    return ticket;
-  } catch (err) {
-    console.log(err);
-    throw Error(`${err}`);
-  }
-}
-
-export async function getTicketByNumber(id: String) {
-  try {
-    let ticket = await ticketModel.findOne({number:id})
     return ticket;
   } catch (err) {
     console.log(err);

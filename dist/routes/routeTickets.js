@@ -159,11 +159,6 @@ router.get("/summary", (req, res) => __awaiter(void 0, void 0, void 0, function*
         res.status(500).send({ error: `${err}` });
     }
 }));
-router.get("/byNumber/:number", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    let { number } = req.params;
-    let ticket = yield (0, controllerTickets_1.getTicketByNumber)(number);
-    res.send(ticket);
-}));
 router.get("/:id", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let { id } = req.params;
     let ticket = yield (0, controllerTickets_1.getTicketById)(id);
@@ -221,7 +216,7 @@ function createTickets(quantity, req, tickets, res, momoPayload) {
                         momoPayload,
                         event,
                     });
-                    (0, routeSMS_1.default)(`+${(_a = momoPayload === null || momoPayload === void 0 ? void 0 : momoPayload.payer) === null || _a === void 0 ? void 0 : _a.partyId}`, `Ikaze mu gitaramo NZAKINGURA Live concert. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.title} ticket - igura ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.price} ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.currency}`, "Shapeherd");
+                    (0, routeSMS_1.default)(`+${(_a = momoPayload === null || momoPayload === void 0 ? void 0 : momoPayload.payer) === null || _a === void 0 ? void 0 : _a.partyId}`, `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.title} ticket - igura ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.price} ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.currency}`, "EVENTIXR");
                     tickets.push(ticket);
                 });
             });
@@ -263,7 +258,7 @@ function createTicketsFromPayload(quantity, ticketPackage, tickets, res, momoPay
                         ticketPackage,
                         momoPayload,
                     });
-                    (0, routeSMS_1.default)(`+${(_a = momoPayload === null || momoPayload === void 0 ? void 0 : momoPayload.payer) === null || _a === void 0 ? void 0 : _a.partyId}`, `Ikaze mu gitaramo NZAKINGURA Live concert. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.title} ticket - igura ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.price} ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.currency}`, "Shapeherd");
+                    (0, routeSMS_1.default)(`+${(_a = momoPayload === null || momoPayload === void 0 ? void 0 : momoPayload.payer) === null || _a === void 0 ? void 0 : _a.partyId}`, `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.title} ticket - igura ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.price} ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.currency}`, "EVENTIXR");
                     tickets.push(ticket);
                 });
             });

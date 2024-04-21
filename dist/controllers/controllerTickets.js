@@ -9,12 +9,12 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateTicket = exports.getTicketByNumber = exports.getTicketById = exports.getAllTickets = void 0;
+exports.updateTicket = exports.getTicketById = exports.getAllTickets = void 0;
 const tickets_1 = require("../models/tickets");
 function getAllTickets() {
     return __awaiter(this, void 0, void 0, function* () {
         try {
-            let tickets = yield tickets_1.ticketModel.find({ "ticketPackage.title": "Invitation" });
+            let tickets = yield tickets_1.ticketModel.find({ event: "64a72d14ef9fc1c25561e7e9" });
             return tickets;
         }
         catch (err) {
@@ -37,19 +37,6 @@ function getTicketById(id) {
     });
 }
 exports.getTicketById = getTicketById;
-function getTicketByNumber(id) {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            let ticket = yield tickets_1.ticketModel.findOne({ number: id });
-            return ticket;
-        }
-        catch (err) {
-            console.log(err);
-            throw Error(`${err}`);
-        }
-    });
-}
-exports.getTicketByNumber = getTicketByNumber;
 function updateTicket(id, updates) {
     return __awaiter(this, void 0, void 0, function* () {
         try {

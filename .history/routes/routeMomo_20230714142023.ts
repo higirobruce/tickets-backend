@@ -1,7 +1,6 @@
 import { randomUUID } from "crypto";
 import { Router } from "express";
 import fetch from "node-fetch";
-import { createTickets } from "./routeTickets";
 
 let router = Router();
 
@@ -14,7 +13,7 @@ router.post("/requestToPay", async (req, res) => {
   let refId = randomUUID();
   await getToken(req);
   let paymentPayload = req.body;
-  req.session.paymentPayload = paymentPayload;
+  console.log(paymentPayload);
 
   fetch(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay`, {
     method: "POST",
@@ -28,17 +27,18 @@ router.post("/requestToPay", async (req, res) => {
     body: JSON.stringify(paymentPayload),
   })
     .then((response) => {
-      res.status(response.status).send({ message: response.statusText, refId });
+      res
+        .status(response.status)
+        .send({ statusText: response.statusText, refId, response: response.json() });
     })
     .catch((err) => {
+      console.log(err);
       res.send({ errorMessage: `${err}` });
     });
 });
 
-router.get("/statusOfRequest/:refId", async (req, res) => {
+router.get("/getStatusOfRequest/:refId", async (req, res) => {
   let { refId } = req.params;
-  let { title, price, currency } = req.query;
-  await getToken(req);
   fetch(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay/${refId}`, {
     method: "GET",
     headers: {
@@ -54,25 +54,8 @@ router.get("/statusOfRequest/:refId", async (req, res) => {
         res.status(response.status).send(response.statusText);
       }
     })
-    .then(async (response) => {
-      let tickets: any[] = [];
-
-      if (response.status === "SUCCESSFUL") {
-        console.log("Payment session:", req.session)
-        req.body.paymentPayload = req.session.paymentPayload;
-        req.body.ticketPackage = { title, price, currency };
-        await createTickets(
-          "1",
-          req,
-          tickets,
-          res,
-          response
-        );
-
-        res.send(response);
-      } else {
-        res.send(response);
-      }
+    .then((response) => {
+      res.send(response);
     })
     .catch((err) => {
       res.send({ errorMessage: `${err}` });
@@ -80,7 +63,6 @@ router.get("/statusOfRequest/:refId", async (req, res) => {
 });
 
 export default router;
-
 async function getToken(req: any) {
   return fetch(`${process.env.MOMO_BASE_URL}/collection/token/`, {
     method: "POST",
@@ -95,6 +77,7 @@ async function getToken(req: any) {
       if (response.ok) {
         return response.json();
       } else {
+        console.log(response);
         throw Error(response.statusText);
       }
     })

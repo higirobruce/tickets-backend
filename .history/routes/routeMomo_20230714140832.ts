@@ -1,7 +1,6 @@
 import { randomUUID } from "crypto";
 import { Router } from "express";
 import fetch from "node-fetch";
-import { createTickets } from "./routeTickets";
 
 let router = Router();
 
@@ -14,9 +13,9 @@ router.post("/requestToPay", async (req, res) => {
   let refId = randomUUID();
   await getToken(req);
   let paymentPayload = req.body;
-  req.session.paymentPayload = paymentPayload;
+  console.log(paymentPayload);
 
-  fetch(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay`, {
+  fetch(`https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${req.session.accessToken}`,
@@ -31,22 +30,24 @@ router.post("/requestToPay", async (req, res) => {
       res.status(response.status).send({ message: response.statusText, refId });
     })
     .catch((err) => {
+      console.log(err);
       res.send({ errorMessage: `${err}` });
     });
 });
 
-router.get("/statusOfRequest/:refId", async (req, res) => {
+router.get("/getStatusOfRequest/:refId", async (req, res) => {
   let { refId } = req.params;
-  let { title, price, currency } = req.query;
-  await getToken(req);
-  fetch(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay/${refId}`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${req.session.accessToken}`,
-      "Ocp-Apim-Subscription-Key": process.env.MOMO_SUBSCRIPTION_KEY || "",
-      "X-Target-Environment": process.env.MOMO_ENVIRONMENT || "",
-    },
-  })
+  fetch(
+    `https://sandbox.momodeveloper.mtn.com/collection/v1_0/requesttopay/${refId}`,
+    {
+      method: "GET",
+      headers: {
+        Authorization: `Bearer ${req.session.accessToken}`,
+        "Ocp-Apim-Subscription-Key": process.env.MOMO_SUBSCRIPTION_KEY || "",
+        "X-Target-Environment": process.env.MOMO_ENVIRONMENT || "",
+      },
+    }
+  )
     .then((response) => {
       if (response.ok) {
         return response.json();
@@ -54,38 +55,21 @@ router.get("/statusOfRequest/:refId", async (req, res) => {
         res.status(response.status).send(response.statusText);
       }
     })
-    .then(async (response) => {
-      let tickets: any[] = [];
-
-      if (response.status === "SUCCESSFUL") {
-        console.log("Payment session:", req.session)
-        req.body.paymentPayload = req.session.paymentPayload;
-        req.body.ticketPackage = { title, price, currency };
-        await createTickets(
-          "1",
-          req,
-          tickets,
-          res,
-          response
-        );
-
-        res.send(response);
-      } else {
-        res.send(response);
-      }
+    .then((response) => {
+      res.send(response);
     })
     .catch((err) => {
       res.send({ errorMessage: `${err}` });
     });
 });
 
-export default router;
 
+export default router;
 async function getToken(req: any) {
-  return fetch(`${process.env.MOMO_BASE_URL}/collection/token/`, {
+  return fetch("https://sandbox.momodeveloper.mtn.com/collection/token/", {
     method: "POST",
     headers: {
-      Authorization: `Basic ${process.env.MOMO_BASIC_AUTH}` || "",
+      Authorization: `Basic ${process.env.MOMO_BASIC_AUTH}`  || "",
       "X-Reference-Id": "b12d7b22-3057-4c8e-ad50-63904171d18a",
       "Ocp-Apim-Subscription-Key": process.env.MOMO_SUBSCRIPTION_KEY || "",
       "X-Target-Environment": process.env.MOMO_ENVIRONMENT || "",
@@ -95,6 +79,7 @@ async function getToken(req: any) {
       if (response.ok) {
         return response.json();
       } else {
+        console.log(response)
         throw Error(response.statusText);
       }
     })

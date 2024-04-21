@@ -21,7 +21,7 @@ declare module "express-session" {
 }
 // dotenv.config();
 
-const PORT = 8081;
+const PORT = process.env.PORT || 8081;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 // Set up default mongoose connection
 var mongoDB = `mongodb+srv://mongo-admin:2tij6e0anAgKU6tb@myfreecluster.kxvgw.mongodb.net/tickets?retryWrites=true&w=majority`;
