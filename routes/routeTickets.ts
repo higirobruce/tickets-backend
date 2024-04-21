@@ -7,6 +7,7 @@ import { packageSchema, ticketModel } from "../models/tickets";
 import createTicket, {
   getAllTickets,
   getTicketById,
+  getTicketByNumber,
 } from "../controllers/controllerTickets";
 import { Statuses } from "../models/events";
 import { validate } from "node-cron";
@@ -47,6 +48,7 @@ let router = Router();
 
 router.get("/", async (req, res) => {
   let tickets = await getAllTickets();
+  
   res.send(tickets);
 });
 
@@ -156,6 +158,12 @@ router.get("/summary", async (req, res) => {
   }
 });
 
+router.get("/byNumber/:number", async (req, res) => {
+  let { number } = req.params;
+  let ticket = await getTicketByNumber(number);
+  res.send(ticket);
+});
+
 router.get("/:id", async (req, res) => {
   let { id } = req.params;
   let ticket = await getTicketById(id);
@@ -233,8 +241,8 @@ export async function createTickets(
 
         sendMessage(
           `+${momoPayload?.payer?.partyId}`,
-          `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
-          "EVENTIXR"
+          `Ikaze mu gitaramo NZAKINGURA Live concert. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
+          "Shapeherd"
         );
         tickets.push(ticket);
       });
@@ -286,8 +294,8 @@ export async function createTicketsFromPayload(
         });
         sendMessage(
           `+${momoPayload?.payer?.partyId}`,
-          `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
-          "EVENTIXR"
+          `Ikaze mu gitaramo NZAKINGURA Live concert. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
+          "Shapeherd"
         );
         tickets.push(ticket);
       });

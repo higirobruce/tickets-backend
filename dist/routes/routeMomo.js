@@ -16,6 +16,7 @@ const crypto_1 = require("crypto");
 const express_1 = require("express");
 const node_fetch_1 = __importDefault(require("node-fetch"));
 const routeTickets_1 = require("./routeTickets");
+const routeSMS_1 = __importDefault(require("./routeSMS"));
 let router = (0, express_1.Router)();
 router.post("/getToken", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     let token = yield getToken(req);
@@ -80,6 +81,11 @@ router.get("/statusOfRequest/:refId", (req, res) => __awaiter(void 0, void 0, vo
         .catch((err) => {
         res.send({ errorMessage: `${err}` });
     });
+}));
+router.post("/sendSMS", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    let { partyId, ticketNumber, qrUrl, ticketPackage } = req.body;
+    (0, routeSMS_1.default)(`+${partyId}`, `Ikaze mu gitaramo NZAKINGURA Live concert. Itike yanyu ${ticketNumber} mwayibona aha ${qrUrl}. Mwaguze ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.title} ticket - igura ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.price} ${ticketPackage === null || ticketPackage === void 0 ? void 0 : ticketPackage.currency}`, "Shapeherd");
+    res.send('done');
 }));
 exports.default = router;
 function getToken(req) {

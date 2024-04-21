@@ -19,9 +19,9 @@ const routeTickets_1 = __importDefault(require("./routes/routeTickets"));
 // dotenv.config();
 const PORT = 8081;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-//Set up default mongoose connection
-// var mongoDB = `mongodb://${process.env.DB_USER}:${process.env.DB_PASSWORD}@127.0.0.1:27017/tickets?authSource=admin`;
-var mongoDB = process.env.TICKETS_DB;
+// Set up default mongoose connection
+var mongoDB = `mongodb+srv://mongo-admin:2tij6e0anAgKU6tb@myfreecluster.kxvgw.mongodb.net/tickets?retryWrites=true&w=majority`;
+// var mongoDB = process.env.TICKETS_DB as string;
 mongoose_1.default.connect(mongoDB);
 //Get the default connection
 var db = mongoose_1.default.connection;
@@ -85,6 +85,7 @@ let ensureUserAuthorized = (req, res, next) => {
 };
 exports.ensureUserAuthorized = ensureUserAuthorized;
 app.get("/", (req, res) => {
+    // sendMessage("+250788317413", "Hello from Bruce", "");
     res.send("Welcome to Tickets");
 });
 app.use("/users", routeUsers_1.default);
@@ -92,5 +93,6 @@ app.use("/events", routeEvents_1.default);
 app.use("/momo", routeMomo_1.default);
 app.use("/tickets", routeTickets_1.default);
 app.listen(PORT, () => {
+    // twilioSend();
     console.log(`⚡️[server]: Server is running at ${PORT}`);
 });

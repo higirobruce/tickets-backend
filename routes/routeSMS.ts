@@ -11,13 +11,14 @@ const AfricasTalking = require("africastalking")(credentials);
 const sms = AfricasTalking.SMS;
 
 function sendMessage(to: any, message: any, from: any) {
+  console.log('sending..')
   const options = {
     // Set the numbers you want to send to in international format
     to,
     // Set your message
     message,
     // Set your shortCode or senderId
-    // from: "Shapeherd",
+    from: "Shapeherd",
   };
 
   // That’s it, hit send and we’ll take care of the rest
@@ -27,11 +28,13 @@ function sendMessage(to: any, message: any, from: any) {
     ) /* The code `then(console.log).catch((err:any)=>{ console.log(err)
   sms.send(options) });` is handling the promise returned by the `sms.send()`
   method. */
-    .then(()=>{
+    .then((res:any)=>{
+      console.log(JSON.stringify(res))
       //update ticket mention sms sent
     })
     .catch((err: any) => {
       //update ticket mention sms not sent
+      console.log(err)
       sms.send({
         to: "+250788317413",
         message: `Sending sms failed for ${to}`,

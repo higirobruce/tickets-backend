@@ -11,6 +11,8 @@ import usersRoute from "./routes/routeUsers";
 import eventsRoute from "./routes/routeEvents";
 import momoRoute from "./routes/routeMomo";
 import ticketsRoute from "./routes/routeTickets";
+import sendMessage from "./routes/routeSMS";
+import { twilioSend } from "./services/twilioSms";
 
 declare module "express-session" {
   export interface SessionData {
@@ -22,13 +24,12 @@ declare module "express-session" {
 }
 // dotenv.config();
 
-const PORT = process.env.PORT || 8081;
+const PORT = 8081;
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-//Set up default mongoose connection
-// var mongoDB = `mongodb://${process.env.DB_USER}:${process.env.DB_PASSWORD}@127.0.0.1:27017/tickets?authSource=admin`;
+// Set up default mongoose connection
+var mongoDB = `mongodb+srv://mongo-admin:2tij6e0anAgKU6tb@myfreecluster.kxvgw.mongodb.net/tickets?retryWrites=true&w=majority`;
 
-var mongoDB =
-  process.env.TICKETS_DB as string;
+// var mongoDB = process.env.TICKETS_DB as string;
 
 mongoose.connect(mongoDB);
 //Get the default connection
@@ -109,6 +110,7 @@ export let ensureUserAuthorized = (
 };
 
 app.get("/", (req: Request, res: Response) => {
+  // sendMessage("+250788317413", "Hello from Bruce", "");
   res.send("Welcome to Tickets");
 });
 
@@ -118,5 +120,6 @@ app.use("/momo", momoRoute);
 app.use("/tickets", ticketsRoute);
 
 app.listen(PORT, () => {
+  // twilioSend();
   console.log(`⚡️[server]: Server is running at ${PORT}`);
 });

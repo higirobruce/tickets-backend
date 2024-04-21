@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { Router } from "express";
 import fetch from "node-fetch";
 import { createTickets } from "./routeTickets";
+import sendMessage from "./routeSMS";
 
 let router = Router();
 
@@ -58,16 +59,10 @@ router.get("/statusOfRequest/:refId", async (req, res) => {
       let tickets: any[] = [];
 
       if (response.status === "SUCCESSFUL") {
-        console.log("Payment session:", req.session)
+        console.log("Payment session:", req.session);
         req.body.paymentPayload = req.session.paymentPayload;
         req.body.ticketPackage = { title, price, currency };
-        await createTickets(
-          "1",
-          req,
-          tickets,
-          res,
-          response
-        );
+        await createTickets("1", req, tickets, res, response);
 
         res.send(response);
       } else {
@@ -77,6 +72,16 @@ router.get("/statusOfRequest/:refId", async (req, res) => {
     .catch((err) => {
       res.send({ errorMessage: `${err}` });
     });
+});
+
+router.post("/sendSMS", async (req, res) => {
+  let { partyId, ticketNumber, qrUrl, ticketPackage } = req.body;
+  sendMessage(
+    `+${partyId}`,
+    `Ikaze mu gitaramo NZAKINGURA Live concert. Itike yanyu ${ticketNumber} mwayibona aha ${qrUrl}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
+    "Shapeherd"
+  )
+  res.send('done')
 });
 
 export default router;
