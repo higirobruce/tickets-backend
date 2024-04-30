@@ -233,7 +233,7 @@ export async function createTickets(
 
         sendMessage(
           `+${momoPayload?.payer?.partyId}`,
-          `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
+          `Ikaze mu gitaramo NZAKINGURA Live Concert. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
           "EVENTIXR"
         );
         tickets.push(ticket);
@@ -286,7 +286,7 @@ export async function createTicketsFromPayload(
         });
         sendMessage(
           `+${momoPayload?.payer?.partyId}`,
-          `Ikaze mu gitaramo IBISINGIZO BYA NYIRIBIREMWA. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
+          `Ikaze mu gitaramo NZAKINGURA Live Concert. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
           "EVENTIXR"
         );
         tickets.push(ticket);
