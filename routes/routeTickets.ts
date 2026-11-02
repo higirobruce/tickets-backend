@@ -1,352 +1,206 @@
-// const QRCode = require('qrcode');
-
-import QRCode from "qrcode";
-
-import { Router } from "express";
-import { packageSchema, ticketModel } from "../models/tickets";
-import createTicket, {
+import { Router, Request, Response } from "express";
+import mongoose from "mongoose";
+import { ticketModel } from "../models/tickets";
+import { Statuses } from "../models/events";
+import {
   getAllTickets,
   getTicketById,
+  getTicketByNumber,
 } from "../controllers/controllerTickets";
-import { Statuses } from "../models/events";
-import { validate } from "node-cron";
-import sendMessage from "./routeSMS";
-import mongoose from "mongoose";
-export function createQrCode(param: any) {
-  QRCode.toDataURL(param, function (err, url) {
-    return url;
-  });
-}
-
-export async function generateTicketNumber() {
-  // Get the last saved document
-  const lastDocument = await ticketModel.findOne().sort({ number: -1 });
-  // Generate a new 10-digit number, starting from 1000000000 and incrementing by 1
-  let newNumber = 1000000000;
-  if (lastDocument && lastDocument.number) {
-    newNumber = lastDocument.number + 1;
-  }
-
-  // Return the new number
-  return newNumber;
-}
-
-export async function generateTicketNumbers(quantity: number) {
-  // Get the last saved document
-  let totalNumber = 10000000 + (await ticketModel.find().count());
-  let numbers: any[] = [];
-  for (let i = 0; i < quantity; i++) {
-    totalNumber++;
-    numbers.push(totalNumber);
-  }
-
-  return numbers;
-}
+import { ensureUserAuthorized, requireRole } from "../middleware/auth";
+import { issueTickets, webUrl } from "../services/tickets";
+import { seesEveryEvent, ticketScope } from "../services/access";
+import { eventModel } from "../models/events";
+import { publicEvent } from "../services/events";
+import { paidAmount, paidCurrency } from "../services/reporting";
 
 let router = Router();
 
-router.get("/", async (req, res) => {
-  let tickets = await getAllTickets();
-  res.send(tickets);
+function ticketPage(ticket: any, showOnly: boolean) {
+  const base = `${webUrl()}/tickets/${ticket._id}`;
+  return showOnly ? `${base}?showOnly=1` : base;
+}
+
+function sendError(res: Response, err: unknown, status = 500) {
+  res.status(status).send({ errorMessage: `${err}` });
+}
+
+router.get("/", ensureUserAuthorized, async (req, res) => {
+  try {
+    const event = typeof req.query.event === "string" ? req.query.event : undefined;
+    const scope = await ticketScope(req.user!, event);
+    if (!scope) return res.status(403).send({ errorMessage: "You do not manage this event" });
+    res.send(await getAllTickets(scope));
+  } catch (err) {
+    sendError(res, err);
+  }
 });
 
-router.get("/show/:number", async (req, res, next) => {
-  let number = req.params.number;
-
-  // let ticket = await ticketModel.findOneAndUpdate(
-  //   { number, status: Statuses.sold },
-  //   { $set: { status: Statuses.consumed } },
-  //   { new: true }
-  // );
-
-  let ticket = await ticketModel.findOne({
-    number,
-    // status: { $in: [Statuses.pending, Statuses.sold] },
-  });
-
-  if (ticket)
-    res.redirect(
-      301,
-      `https://www.eventixr.com/tickets/${ticket?._id}?showOnly=1`
-    );
-  else
-    res
-      .status(404)
-      .send({ erroMessage: "Ticket not found or already consumed" });
-
-  // res.send("Tickets can not be consumed now.");
+router.get("/show/:number", async (req, res) => {
+  const ticket = await getTicketByNumber(Number(req.params.number));
+  if (ticket) res.redirect(ticketPage(ticket, true));
+  else res.status(404).send({ errorMessage: "Ticket not found" });
 });
 
-router.get("/validate/:number", async (req, res, next) => {
-  let number = req.params.number;
-  let { showOnly } = req.query;
-
-  // let ticket = await ticketModel.findOneAndUpdate(
-  //   { number, status: Statuses.sold },
-  //   { $set: { status: Statuses.consumed } },
-  //   { new: true }
-  // );
-
-  let ticket = await ticketModel.findOne({
-    number,
-    // status: { $in: [Statuses.pending, Statuses.sold] },
-  });
-
-  if (ticket) {
-    if (!showOnly)
-      res.redirect(301, `https://www.eventixr.com/tickets/${ticket?._id}`);
-    else
-      res.redirect(
-        301,
-        `https://www.eventixr.com/tickets/${ticket?._id}?showOnly=${showOnly}`
-      );
-  } else
-    res
-      .status(404)
-      .send({ erroMessage: "Ticket not found or already consumed" });
-
-  // res.send("Tickets can not be consumed now.");
+router.get("/validate/:number", async (req, res) => {
+  const ticket = await getTicketByNumber(Number(req.params.number));
+  if (ticket) res.redirect(ticketPage(ticket, Boolean(req.query.showOnly)));
+  else res.status(404).send({ errorMessage: "Ticket not found" });
 });
 
-router.get("/sell/:number", async (req, res) => {
-  let number = parseInt(req.params.number);
-  let { momoRef } = req.query;
+router.get("/byNumber/:number", async (req, res) => {
+  const ticket = await getTicketByNumber(Number(req.params.number));
+  if (ticket) res.send(ticket);
+  else res.status(404).send({ errorMessage: "Ticket not found" });
+});
 
-  let ticket = await ticketModel.findOneAndUpdate(
+const sell = async (req: Request, res: Response) => {
+  const number = parseInt(String(req.params.number));
+  const momoRef = req.query.momoRef ?? req.body?.momoRef;
+  const ticket = await ticketModel.findOneAndUpdate(
     { number, status: Statuses.pending },
     { $set: { status: Statuses.sold, momoRef } },
     { new: true }
   );
-
   if (ticket) res.send(ticket);
-  else {
-    res.statusMessage = "Ticket not found or already sold";
-    res.status(404).send({ erroMessage: "Ticket not found or already sold" });
+  else res.status(404).send({ errorMessage: "Ticket not found or already sold" });
+};
+router.get("/sell/:number", ensureUserAuthorized, sell);
+router.post("/sell/:number", ensureUserAuthorized, sell);
+
+const consume = async (req: Request, res: Response) => {
+  const number = parseInt(String(req.params.number));
+  if (!seesEveryEvent(req.user!)) {
+    const existing = await ticketModel.findOne({ number }).select("event");
+    if (!existing) return res.status(404).send({ errorMessage: "Ticket not found" });
+    const scope = await ticketScope(req.user!, existing.event ? String(existing.event) : "none");
+    if (!scope) return res.status(403).send({ errorMessage: "This ticket is not for one of your events" });
   }
-});
-
-router.get("/consume/:number", async (req, res) => {
-  let number = parseInt(req.params.number);
-  let { doneBy } = req.query;
-  console.log(req.query);
-
-  let ticket = await ticketModel.findOneAndUpdate(
-    { number, status: Statuses.pending },
-    { $set: { status: Statuses.consumed, consumedBy: doneBy } },
+  const ticket = await ticketModel.findOneAndUpdate(
+    { number, status: { $in: [Statuses.pending, Statuses.sold] } },
+    { $set: { status: Statuses.consumed, consumedBy: req.user!._id } },
     { new: true }
   );
-
   if (ticket) res.send(ticket);
-  else
-    res
-      .status(404)
-      .send({ erroMessage: "Ticket not found or already consumed" });
+  else res.status(404).send({ errorMessage: "Ticket not found or already consumed" });
+};
+router.get("/consume/:number", ensureUserAuthorized, consume);
+router.post("/consume/:number", ensureUserAuthorized, consume);
 
-  // res.send("Tickets can not be consumed now.");
-});
+/** Accepts a bare ticket number or the full link encoded in the QR code. */
+function ticketNumberFromCode(code: string) {
+  const text = decodeURIComponent(code);
+  const fromUrl = text.match(/\/tickets\/(?:validate|show|byNumber)\/(\d+)/);
+  const digits = fromUrl ? fromUrl[1] : text.trim();
+  return /^\d+$/.test(digits) ? Number(digits) : null;
+}
 
-router.get("/summary", async (req, res) => {
-  console.log(req.session.user);
+/** Gate scanning. GET looks a ticket up; POST admits it. Both answer with the ticket and its event. */
+const scan = (admit: boolean) => async (req: Request, res: Response) => {
+  const number = ticketNumberFromCode(String(req.params.code));
+  if (number === null) return res.status(400).send({ errorMessage: "That code is not a ticket" });
+  const existing = await ticketModel.findOne({ number });
+  if (!existing) return res.status(404).send({ errorMessage: "Ticket not found" });
+  if (!seesEveryEvent(req.user!)) {
+    const scope = await ticketScope(req.user!, existing.event ? String(existing.event) : "none");
+    if (!scope) return res.status(403).send({ errorMessage: "This ticket is not for one of your events" });
+  }
+  const event = existing.event ? publicEvent(await eventModel.findById(existing.event)) : null;
+  if (!admit) return res.send({ ticket: existing, event, admitted: false });
+
+  const ticket = await ticketModel.findOneAndUpdate(
+    { number, status: { $in: [Statuses.pending, Statuses.sold] } },
+    { $set: { status: Statuses.consumed, consumedBy: req.user!._id } },
+    { new: true }
+  );
+  if (!ticket) {
+    return res.status(409).send({
+      errorMessage: `Ticket already admitted at ${existing.updatedAt?.toISOString?.() || "an earlier scan"}`,
+      ticket: existing,
+      event,
+      admitted: false,
+    });
+  }
+  res.send({ ticket, event, admitted: true });
+};
+router.get("/scan/:code", ensureUserAuthorized, scan(false));
+router.post("/scan/:code", ensureUserAuthorized, scan(true));
+
+router.get("/summary", ensureUserAuthorized, async (req, res) => {
   try {
-    let summary = await getTicketsSummary();
-
-    res.send(summary);
+    const event = typeof req.query.event === "string" ? req.query.event : undefined;
+    const from = typeof req.query.from === "string" ? new Date(req.query.from) : undefined;
+    const scope = await ticketScope(req.user!, event);
+    if (!scope) return res.status(403).send({ errorMessage: "You do not manage this event" });
+    res.send(await getTicketsSummary({ scope, from }));
   } catch (err) {
-    res.status(500).send({ error: `${err}` });
+    sendError(res, err);
   }
 });
 
 router.get("/:id", async (req, res) => {
-  let { id } = req.params;
-  let ticket = await getTicketById(id);
-  res.send(ticket);
-});
-
-router.post("/", async (req, res) => {
   try {
-    let number = await generateTicketNumber();
-    let { ticketPackage } = req.body;
-
-    let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
-
-    let qrCode = "";
-    QRCode.toDataURL(qrParam, async function (err, url) {
-      qrCode = url;
-
-      let ticket = await createTicket({
-        number,
-        qrCode,
-        ticketPackage,
-      });
-
-      res.status(201).send(ticket);
-    });
+    const ticket = await getTicketById(String(req.params.id));
+    if (ticket) res.send(ticket);
+    else res.status(404).send({ errorMessage: "Ticket not found" });
   } catch (err) {
-    res.status(500).send({ errorMessage: `${err}` });
+    sendError(res, err, 400);
   }
 });
 
-router.post("/batch/:quantity", async (req, res) => {
-  let { quantity } = req.params;
-  let tickets: any[] = [];
-  res.status(201).send(await createTickets(quantity, req, tickets, res, null));
+router.post("/", ensureUserAuthorized, requireRole("admin", "staff"), async (req, res) => {
+  try {
+    const { ticketPackage, event, phone } = req.body;
+    const [ticket] = await issueTickets({ quantity: 1, ticketPackage, event, phone });
+    res.status(201).send(ticket);
+  } catch (err) {
+    sendError(res, err);
+  }
 });
 
-router.post("/fromPayload", async (req, res) => {
-  let { ticketPackage, momoPayload, quantity } = req.body;
+router.post("/batch/:quantity", ensureUserAuthorized, requireRole("admin", "staff"), async (req, res) => {
+  try {
+    const { ticketPackage, event, phone, momoPayload } = req.body;
+    const tickets = await issueTickets({
+      quantity: parseInt(String(req.params.quantity)),
+      ticketPackage,
+      event,
+      phone,
+      momoPayload,
+    });
+    res.status(201).send(tickets);
+  } catch (err) {
+    sendError(res, err);
+  }
+});
 
-  res.send(
-    await createTicketsFromPayload(quantity, ticketPackage, [], "", momoPayload)
-  );
+router.post("/fromPayload", ensureUserAuthorized, requireRole("admin", "staff"), async (req, res) => {
+  try {
+    const { ticketPackage, momoPayload, quantity, event } = req.body;
+    const tickets = await issueTickets({
+      quantity: parseInt(quantity) || 1,
+      ticketPackage,
+      event,
+      momoPayload,
+      momoRef: momoPayload?.referenceId,
+    });
+    res.status(201).send(tickets);
+  } catch (err) {
+    sendError(res, err);
+  }
 });
 
 export default router;
 
-export async function createTickets(
-  quantity: string,
-  req: any,
-  tickets: any[],
-  res: any,
-  momoPayload: any
-) {
-  try {
-    let numbers = await generateTicketNumbers(parseInt(quantity));
+/** Paid tickets per package and currency; amounts in different currencies are never added together. */
+export async function getTicketsSummary(filter: { scope?: any; from?: Date } = {}) {
+  const match: any = { $or: [{ payment: { $ne: null } }, { momoPayload: { $ne: null } }], ...(filter.scope || {}) };
+  if (filter.from && !isNaN(filter.from.getTime())) match.createdAt = { $gte: filter.from };
 
-    numbers.forEach((n) => {
-      let { ticketPackage, event } = req.body;
-
-      // let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
-      let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}`;
-      let qrParamShowOnly = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}?showOnly=1`;
-
-      let qrCode = "";
-      QRCode.toDataURL(qrParam, function (err, url) {
-        qrCode = url;
-
-        let ticket = createTicket({
-          number: n,
-          qrCode,
-          ticketPackage,
-          momoPayload,
-          event,
-        });
-
-        sendMessage(
-          `+${momoPayload?.payer?.partyId}`,
-          `Ikaze mu gitaramo NZAKINGURA Live Concert. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
-          "EVENTIXR"
-        );
-        tickets.push(ticket);
-      });
-    });
-
-    let allPromises = Promise.all(tickets);
-
-    return allPromises
-      .then((v) => {
-        return v;
-        // res.status(201).send(v);
-      })
-      .catch((err) => {
-        throw Error(`${err}`);
-        // res.status(500).send({ errorMessage: `${err}` });
-      });
-  } catch (err) {
-    throw Error(`${err}`);
-    // res.status(500).send({ errorMessage: `${err}` });
-  }
+  return ticketModel.aggregate([
+    { $match: match },
+    { $group: { _id: { title: "$ticketPackage.title", currency: paidCurrency }, count: { $count: {} }, total: { $sum: paidAmount } } },
+    { $project: { _id: 0, title: "$_id.title", currency: "$_id.currency", count: 1, total: 1 } },
+    { $sort: { title: -1, currency: 1 } },
+  ]);
 }
-
-export async function createTicketsFromPayload(
-  quantity: string,
-  ticketPackage: any,
-  tickets: any[],
-  res: any,
-  momoPayload: any
-) {
-  ticketPackage._id = new mongoose.Types.ObjectId(ticketPackage._id);
-  console.log(ticketPackage);
-  try {
-    let numbers = await generateTicketNumbers(parseInt(quantity));
-
-    numbers.forEach((n) => {
-      // let qrParam = `${process.env.TICKETS_BCKEND_URL}:${process.env.BCKEND_PORT}/tickets/validate/${number}`;
-      let qrParam = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}`;
-      let qrParamShowOnly = `${process.env.TICKETS_BCKEND_URL}/tickets/validate/${n}?showOnly=1`;
-
-      let qrCode = "";
-      QRCode.toDataURL(qrParam, function (err, url) {
-        qrCode = url;
-
-        let ticket = createTicket({
-          number: n,
-          qrCode,
-          ticketPackage,
-          momoPayload,
-        });
-        sendMessage(
-          `+${momoPayload?.payer?.partyId}`,
-          `Ikaze mu gitaramo NZAKINGURA Live Concert. Itike yanyu ${n} mwayibona aha ${qrParamShowOnly}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
-          "EVENTIXR"
-        );
-        tickets.push(ticket);
-      });
-    });
-
-    let allPromises = Promise.all(tickets);
-
-    return allPromises
-      .then((v) => {
-        return v;
-        // res.status(201).send(v);
-      })
-      .catch((err) => {
-        throw Error(`${err}`);
-        // res.status(500).send({ errorMessage: `${err}` });
-      });
-  } catch (err) {
-    throw Error(`${err}`);
-    // res.status(500).send({ errorMessage: `${err}` });
-  }
-}
-
-export async function getTicketsSummary() {
-  let pipeline = [
-    {
-      $match: {
-        createdAt: {
-          $gte: new Date("Fri, 13 Aug 2023 00:00:00 GMT"),
-        },
-        momoPayload: { $ne: null },
-      },
-    },
-    {
-      $group: {
-        _id: "$ticketPackage.title",
-        count: {
-          $count: {},
-        },
-        total: {
-          $sum: {
-            $toInt: "$momoPayload.amount",
-          },
-        },
-      },
-    },
-  ];
-
-  let data = await ticketModel.aggregate(pipeline).sort({ _id: -1 });
-
-  return data;
-}
-// QRCode.toFile(
-//   "/output-file-path/file.png",
-//   "Encode this text in QR code",
-//   {
-//     errorCorrectionLevel: "H",
-//   },
-//   function (err: any) {
-//     if (err) throw err;
-//     console.log("QR code saved!");
-//   }
-// );

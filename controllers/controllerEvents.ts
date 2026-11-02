@@ -19,7 +19,7 @@ export async function getEventById(id: string) {
   }
 }
 
-export async function createTicket(eventDoc: any) {
+export async function createEvent(eventDoc: any) {
   try {
     let newEvent = new eventModel(eventDoc);
 

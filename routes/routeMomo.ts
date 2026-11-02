@@ -1,114 +1,131 @@
 import { randomUUID } from "crypto";
 import { Router } from "express";
-import fetch from "node-fetch";
-import { createTickets } from "./routeTickets";
-import sendMessage from "./routeSMS";
+import { paymentModel } from "../models/payments";
+import { ensureUserAuthorized } from "../middleware/auth";
+import { ticketSms, toInternational } from "../services/tickets";
+import { getToken } from "../services/providers/momo";
+import { getProvider } from "../services/providers/registry";
+import { callProvider, checkPayment, releaseStalePayments, reserveCapacity, settlePayment } from "../services/payments";
+import sendMessage from "../services/sms";
+import { callbackHandler, fail } from "./routePayments";
 
-let router = Router();
+/**
+ * Legacy client contract. Everything here is a thin wrapper over the provider layer, so the
+ * old app keeps working while new clients use /payments.
+ */
+const router = Router();
 
-router.post("/getToken", async (req, res) => {
-  let token = await getToken(req);
-  res.send(token);
+router.post("/getToken", ensureUserAuthorized, async (req, res, next) => {
+  try {
+    res.send(await callProvider(() => getToken()));
+  } catch (err) {
+    fail(res, next, err);
+  }
 });
 
-router.post("/requestToPay", async (req, res) => {
-  let refId = randomUUID();
-  await getToken(req);
-  let paymentPayload = req.body;
-  req.session.paymentPayload = paymentPayload;
+router.post("/requestToPay", async (req, res, next) => {
+  const { eventId, event, ticketPackage, quantity, buyer, ...paymentPayload } = req.body || {};
+  if (!paymentPayload?.amount || !paymentPayload?.payer?.partyId) {
+    return res.status(400).send({ errorMessage: "amount and payer.partyId are required" });
+  }
+  if (!Number.isFinite(Number(paymentPayload.amount))) {
+    return res.status(400).send({ errorMessage: "amount must be a number" });
+  }
+  // PAYMENTS_MODE=mock enables only the mock provider, so momo missing means test mode.
+  const provider = getProvider("momo") ?? getProvider("mock");
+  if (!provider) return res.status(400).send({ errorMessage: "MoMo is not enabled" });
 
-  fetch(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${req.session.accessToken}`,
-      "X-Reference-Id": refId,
-      "Ocp-Apim-Subscription-Key": process.env.MOMO_SUBSCRIPTION_KEY || "",
-      "X-Target-Environment": process.env.MOMO_ENVIRONMENT || "",
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(paymentPayload),
-  })
-    .then((response) => {
-      res.status(response.status).send({ message: response.statusText, refId });
-    })
-    .catch((err) => {
-      res.send({ errorMessage: `${err}` });
+  const refId = randomUUID();
+  const qty = Math.max(1, Math.floor(Number(quantity) || 1));
+  const targetEvent = eventId || event || undefined;
+  // MTN echoes externalId back in the callback; that is how we find the payment again.
+  paymentPayload.externalId = refId;
+
+  try {
+    await releaseStalePayments();
+    const reservation = await reserveCapacity(targetEvent, ticketPackage?._id, qty);
+    if (!reservation.ok) {
+      return res.status(409).send({
+        errorMessage: reservation.remaining
+          ? `Only ${reservation.remaining} left for ${ticketPackage?.title || "this package"}`
+          : `${ticketPackage?.title || "This package"} is sold out`,
+        remaining: reservation.remaining,
+      });
+    }
+
+    const payment = await paymentModel.create({
+      refId,
+      provider: provider.id,
+      amount: Number(paymentPayload.amount),
+      currency: paymentPayload.currency,
+      // Without phone on the record the ticket SMS has nowhere to go.
+      phone: paymentPayload.payer.partyId,
+      payload: paymentPayload,
+      event: targetEvent,
+      ticketPackage,
+      quantity: qty,
+      reserved: Boolean(targetEvent && ticketPackage?._id),
+      buyer: buyer ? { name: buyer.name, email: buyer.email } : undefined,
     });
+
+    const result = await callProvider(() =>
+      provider.start({
+        refId,
+        amount: Number(paymentPayload.amount),
+        currency: paymentPayload.currency,
+        phone: paymentPayload.payer.partyId,
+        description: paymentPayload.payerMessage || "",
+      }),
+    );
+    if (provider.id === "mock") {
+      // Legacy clients poll statusOfRequest, which settles through the mock provider.
+      return res.status(202).send({ message: "Accepted (test mode, no payment taken)", refId, mock: true });
+    }
+    if (result.outcome === "failed") {
+      // statusText can be empty (HTTP/2, proxies), so never let the client see a blank or misleading message.
+      const reason = result.reason || "Payment request failed";
+      await settlePayment(payment, { outcome: "failed", reason, raw: result.raw });
+      return res.status(502).send({ message: reason, refId });
+    }
+    res.status(202).send({ message: "Accepted", refId });
+  } catch (err) {
+    fail(res, next, err);
+  }
 });
 
-router.get("/statusOfRequest/:refId", async (req, res) => {
-  let { refId } = req.params;
-  let { title, price, currency } = req.query;
-  await getToken(req);
-  fetch(`${process.env.MOMO_BASE_URL}/collection/v1_0/requesttopay/${refId}`, {
-    method: "GET",
-    headers: {
-      Authorization: `Bearer ${req.session.accessToken}`,
-      "Ocp-Apim-Subscription-Key": process.env.MOMO_SUBSCRIPTION_KEY || "",
-      "X-Target-Environment": process.env.MOMO_ENVIRONMENT || "",
-    },
-  })
-    .then((response) => {
-      if (response.ok) {
-        return response.json();
-      } else {
-        res.status(response.status).send(response.statusText);
-      }
-    })
-    .then(async (response) => {
-      let tickets: any[] = [];
-
-      if (response.status === "SUCCESSFUL") {
-        console.log("Payment session:", req.session);
-        req.body.paymentPayload = req.session.paymentPayload;
-        req.body.ticketPackage = { title, price, currency };
-        await createTickets("1", req, tickets, res, response);
-
-        res.send(response);
-      } else {
-        res.send(response);
-      }
-    })
-    .catch((err) => {
-      res.send({ errorMessage: `${err}` });
-    });
+router.get("/statusOfRequest/:refId", async (req, res, next) => {
+  const refId = String(req.params.refId);
+  try {
+    if (!(await paymentModel.exists({ refId }))) {
+      if (!getProvider("momo")) return res.status(404).send({ errorMessage: "Unknown payment reference" });
+      // A client that started the payment before payment records existed.
+      const { title, price, currency } = req.query;
+      await paymentModel.create({
+        refId,
+        provider: "momo",
+        ticketPackage: title
+          ? { title: String(title), price: Number(price), currency: currency ? String(currency) : undefined }
+          : undefined,
+      });
+    }
+    const result = await checkPayment(refId);
+    res.status(result.code).send(result.body);
+  } catch (err) {
+    fail(res, next, err);
+  }
 });
 
-router.post("/sendSMS", async (req, res) => {
-  let { partyId, ticketNumber, qrUrl, ticketPackage } = req.body;
-  sendMessage(
-    `+${partyId}`,
-    `Ikaze mu gitaramo NZAKINGURA Live concert. Itike yanyu ${ticketNumber} mwayibona aha ${qrUrl}. Mwaguze ${ticketPackage?.title} ticket - igura ${ticketPackage?.price} ${ticketPackage?.currency}`,
-    "Shapeherd"
-  );
-  res.send("done");
+router.post("/callback", callbackHandler("momo"));
+router.put("/callback", callbackHandler("momo"));
+
+router.post("/sendSMS", ensureUserAuthorized, async (req, res) => {
+  const { partyId, ticketNumber, ticketPackage, eventTitle } = req.body;
+  const to = toInternational(partyId);
+  if (!to || !ticketNumber) {
+    return res.status(400).send({ errorMessage: "partyId and ticketNumber are required" });
+  }
+  sendMessage(to, ticketSms(eventTitle, Number(ticketNumber), ticketPackage), "EVENTIXR");
+  res.send({ message: "done" });
 });
 
 export default router;
-
-async function getToken(req: any) {
-  return fetch(`${process.env.MOMO_BASE_URL}/collection/token/`, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${process.env.MOMO_BASIC_AUTH}` || "",
-      "X-Reference-Id": "b12d7b22-3057-4c8e-ad50-63904171d18a",
-      "Ocp-Apim-Subscription-Key": process.env.MOMO_SUBSCRIPTION_KEY || "",
-      "X-Target-Environment": process.env.MOMO_ENVIRONMENT || "",
-    },
-  })
-    .then((response) => {
-      if (response.ok) {
-        return response.json();
-      } else {
-        throw Error(response.statusText);
-      }
-    })
-    .then((response) => {
-      req.session.accessToken = response?.access_token;
-      return response;
-      //   req.session.momoToken = res?.access_token;
-    })
-    .catch((err) => {
-      return { errorMessage: `${err}` };
-    });
-}

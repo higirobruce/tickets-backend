@@ -1,34 +1,7 @@
 import mongoose from "mongoose";
+import { Currencies, Statuses, packageSchema } from "./shared";
 
-export enum Currencies {
-  rwf = "RWF",
-  usd = "USD",
-  eur = "EUR",
-}
-
-export enum Statuses {
-  pending='pending',
-  ongoing='ongoing',
-  expired='expired',
-  cancelled='cancelled',
-  posponed='postponed',
-  upcoming='upcoming',
-  consumed='consumed',
-  sold = 'sold'
-}
-
-export const packageSchema = new mongoose.Schema({
-  title: {
-    type: String,
-  },
-  currency: {
-    type: String,
-    default: Currencies.rwf,
-  },
-  price:{
-    type: Number
-  }
-});
+export { Currencies, Statuses, packageSchema };
 
 export const eventSchema = new mongoose.Schema({
   imageUrl: {
@@ -47,6 +20,9 @@ export const eventSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  description: {
+    type: String,
+  },
   location: {
     type: String,
     required: true,
@@ -56,34 +32,15 @@ export const eventSchema = new mongoose.Schema({
     type: String,
     default: Statuses.pending,
   },
-});
+  owner: {
+    type: mongoose.Types.ObjectId,
+    ref: "users",
+  },
+  /** Unpublished events are drafts: visible to their owner only. */
+  published: { type: Boolean, default: true },
+}, { timestamps: true });
+
+eventSchema.index({ owner: 1 });
+eventSchema.index({ date: 1 });
 
 export const eventModel = mongoose.model("events", eventSchema);
-// {
-//     _id: "1",
-//     imageUrl:
-//       "https://rgtickets.com/wp-content/uploads/2022/08/WhatsApp-Image-2022-08-25-at-2.05.58-PM-1.jpeg",
-//     title: "Igicaniro Concert Series with Luc Buntu",
-//     date: "01st June 2021",
-//     time: "18h",
-//     artist: "Luc Buntu",
-//     location: "The Prayer House",
-//     packages: [
-//       {
-//         title: "Regular",
-//         price: 5000,
-//         currency: "RWF",
-//       },
-//       {
-//         title: "VIP",
-//         price: 10000,
-//         currency: "RWF",
-//       },
-//       {
-//         title: "VVIP",
-//         price: 30000,
-//         currency: "RWF",
-//       },
-//     ],
-//     status: 'pending'
-//   },

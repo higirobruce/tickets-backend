@@ -1,0 +1,2 @@
+/** Lumicash env block shared by provider and route tests so both run against the same fake partner. */
+export const LUMI_ENV = { PAYMENT_PROVIDERS: "lumicash", LUMICASH_BASE_URL: "http://lumi.test/ewapi", LUMICASH_BASIC_USER: "u", LUMICASH_BASIC_PASS: "p", LUMICASH_PARTNER: "EVENTIXR", LUMICASH_AGENT_MOBILE: "25762479782", LUMICASH_AGENT_CODE: "89503", LUMICASH_AGENT_PASSWORD: "agent-pw", LUMICASH_SIGN_KEY: "secret" };
