@@ -39,6 +39,8 @@ export const ticketSchema = new mongoose.Schema(
     /** Issued by the organiser for free (press, guests); never counted as revenue. */
     complimentary: { type: Boolean, default: false },
     note: String,
+    /** "sent" | "unrouted" (no SMS route for the phone's country) | "none" (no phone). */
+    smsStatus: String,
   },
   { timestamps: true }
 );

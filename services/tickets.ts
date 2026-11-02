@@ -3,6 +3,9 @@ import { ticketModel } from "../models/tickets";
 import { eventModel } from "../models/events";
 import createTicket from "../controllers/controllerTickets";
 import sendMessage from "../services/sms";
+// Routing helpers come from ./sms/routes, not the index, because tests mock the index with only a default export.
+import { languageFor, routeFor, type Language } from "./sms/routes";
+import { ticketText } from "./sms/templates";
 import { emailConfigured, sendTicketEmail } from "./email";
 
 export const TICKET_NUMBER_START = 10000000;
@@ -28,12 +31,15 @@ export async function nextTicketNumber() {
   return Math.max(TICKET_NUMBER_START, (last?.number ?? 0) + 1);
 }
 
-export function ticketSms(eventTitle: string | undefined, number: number, ticketPackage: any) {
-  const greeting = eventTitle ? `Ikaze mu gitaramo ${eventTitle}.` : "Ikaze.";
-  const price = ticketPackage?.price != null
-    ? ` - igura ${ticketPackage.price} ${ticketPackage.currency || "RWF"}`
-    : "";
-  return `${greeting} Itike yanyu ${number} mwayibona aha ${validateUrl(number, true)}. Mwaguze ${ticketPackage?.title ?? ""} ticket${price}`;
+export function ticketSms(eventTitle: string | undefined, number: number, ticketPackage: any, language: Language = "rw") {
+  return ticketText(language, {
+    eventTitle,
+    number,
+    link: validateUrl(number, true),
+    packageTitle: ticketPackage?.title,
+    price: ticketPackage?.price,
+    currency: ticketPackage?.currency,
+  });
 }
 
 export function phoneFromPayload(momoPayload: any): string | undefined {
@@ -71,6 +77,9 @@ export async function issueTickets(options: IssueOptions) {
   const eventDoc = options.event ? await eventModel.findById(options.event) : null;
   const eventId = eventDoc?._id ?? (options.event || undefined);
   const phone = toInternational(options.phone ?? options.payment?.phone ?? phoneFromPayload(options.momoPayload));
+  const language = phone ? languageFor(phone) : "rw";
+  // Recorded on the ticket so support can see why a buyer got no SMS.
+  const smsStatus = !phone ? "none" : routeFor(phone) ? "sent" : "unrouted";
 
   const saved: any[] = [];
   for (let i = 0; i < quantity; i++) {
@@ -83,12 +92,13 @@ export async function issueTickets(options: IssueOptions) {
       buyer: options.buyer || undefined,
       complimentary: Boolean(options.complimentary),
       note: options.note,
+      smsStatus,
     }));
   }
 
   if (phone) {
     for (const ticket of saved) {
-      sendMessage(phone, ticketSms(eventDoc?.title, ticket.number, options.ticketPackage), "EVENTIXR");
+      sendMessage(phone, ticketSms(eventDoc?.title, ticket.number, options.ticketPackage, language), "EVENTIXR");
     }
   }
   const email = options.buyer?.email;
