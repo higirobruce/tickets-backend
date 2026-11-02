@@ -2,7 +2,8 @@ import { randomUUID } from "crypto";
 import { Router, Request, Response } from "express";
 import { paymentModel, PaymentStatuses } from "../models/payments";
 import { ensureUserAuthorized } from "../middleware/auth";
-import { backendUrl, ticketSms, toInternational } from "../services/tickets";
+import { ticketSms, toInternational } from "../services/tickets";
+import { fetchStatus, getToken, momoProvider } from "../services/providers/momo";
 import {
   mockPayments,
   mockStatus,
@@ -14,13 +15,6 @@ import {
 import sendMessage from "../services/sms";
 
 let router = Router();
-
-const momoBase = () => process.env.MOMO_BASE_URL || "";
-const momoHeaders = (token?: string) => ({
-  ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  "Ocp-Apim-Subscription-Key": process.env.MOMO_SUBSCRIPTION_KEY || "",
-  "X-Target-Environment": process.env.MOMO_ENVIRONMENT || "",
-});
 
 function upstreamError(res: Response, err: unknown) {
   res.status(502).send({ errorMessage: `${err}` });
@@ -72,22 +66,18 @@ router.post("/requestToPay", async (req, res) => {
       return res.status(202).send({ message: "Accepted (test mode, no payment taken)", refId, mock: true });
     }
 
-    const { access_token } = await getToken();
     const payment = await paymentModel.create(record);
-    const response = await fetch(`${momoBase()}/collection/v1_0/requesttopay`, {
-      method: "POST",
-      headers: {
-        ...momoHeaders(access_token),
-        "X-Reference-Id": refId,
-        "X-Callback-Url": `${backendUrl()}/momo/callback`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(paymentPayload),
+    const result = await momoProvider().start({
+      refId,
+      amount: Number(paymentPayload.amount),
+      currency: paymentPayload.currency,
+      phone: paymentPayload.payer.partyId,
+      description: paymentPayload.payerMessage || "",
     });
-    if (!response.ok) {
-      await settlePayment(payment, { status: "FAILED", reason: response.statusText });
+    if (result.outcome === "failed") {
+      await settlePayment(payment, { status: "FAILED", reason: result.reason });
     }
-    res.status(response.status).send({ message: response.statusText, refId });
+    res.status(result.outcome === "failed" ? 502 : 202).send({ message: result.reason || "Accepted", refId });
   } catch (err) {
     upstreamError(res, err);
   }
@@ -157,28 +147,3 @@ router.post("/sendSMS", ensureUserAuthorized, async (req, res) => {
 });
 
 export default router;
-
-async function fetchStatus(refId: string) {
-  const { access_token } = await getToken();
-  const response = await fetch(`${momoBase()}/collection/v1_0/requesttopay/${refId}`, {
-    method: "GET",
-    headers: momoHeaders(access_token),
-  });
-  if (!response.ok) throw new Error(`MoMo responded ${response.status} ${response.statusText}`);
-  return response.json();
-}
-
-export async function getToken(): Promise<{ access_token: string }> {
-  const response = await fetch(`${momoBase()}/collection/token/`, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${process.env.MOMO_BASIC_AUTH || ""}`,
-      "X-Reference-Id": process.env.MOMO_API_USER || "",
-      ...momoHeaders(),
-    },
-  });
-  if (!response.ok) {
-    throw new Error(`MoMo token request failed: ${response.status} ${response.statusText}`);
-  }
-  return (await response.json()) as { access_token: string };
-}

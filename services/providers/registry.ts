@@ -1,8 +1,10 @@
 import { PaymentProvider, ProviderConfigError } from "./types";
 import { mockProvider } from "./mock";
+import { momoProvider } from "./momo";
 
 const factories: Record<string, () => PaymentProvider> = {
   mock: () => mockProvider(),
+  momo: () => momoProvider(),
 };
 
 let cache: Map<string, PaymentProvider> | null = null;

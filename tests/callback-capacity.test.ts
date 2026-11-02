@@ -28,7 +28,7 @@ describe("MoMo callback", () => {
     const res = await start(event, event.packages[0]);
     expect(res.status).toBe(202);
     const [, init] = fetchMock.mock.calls[1];
-    expect(init.headers["X-Callback-Url"]).toBe(`http://api.test/momo/callback`);
+    expect(init.headers["X-Callback-Url"]).toBe(`http://api.test/payments/momo/callback`);
     expect(JSON.parse(init.body).externalId).toBe(res.body.refId);
   });
 
