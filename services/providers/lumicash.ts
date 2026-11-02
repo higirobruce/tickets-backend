@@ -85,7 +85,11 @@ export function lumicashProvider(): PaymentProvider {
       try {
         const { ok, body: res } = await post("/api/3rd/partner/get-account", { toAccPhone: customerMobile(phone) });
         if (!ok) return { ok: false, reason: "Lumicash could not check this number" };
-        if (res?.ResponseCode === "01") return { ok: true, name: JSON.parse(res.ResponseMessage).accountName };
+        if (res?.ResponseCode === "01") {
+          // A wallet without a name on file is still valid; omit name rather than send undefined.
+          const name = JSON.parse(res.ResponseMessage || "{}")?.accountName;
+          return typeof name === "string" && name ? { ok: true, name } : { ok: true };
+        }
         if (res?.ResponseCode === "05") return { ok: false, reason: "Wallet not found or locked" };
       } catch {
         // Fall through: an unreachable or garbled lookup is not a reason to name the wallet bad.

@@ -17,7 +17,10 @@ export function enabledProviderIds(): string[] {
   if (raw === undefined || raw.trim() === "") {
     return process.env.PAYMENTS_MODE === "mock" ? ["mock"] : ["momo"];
   }
-  return raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  const ids = raw.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
+  // Only separators is a typo, not a wish for no providers at all.
+  if (!ids.length) throw new ProviderConfigError("PAYMENT_PROVIDERS is empty");
+  return ids;
 }
 
 /** Builds providers lazily and caches them, so a bad id fails at first use rather than at import. */

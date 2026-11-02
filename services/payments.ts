@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import mongoose from "mongoose";
-import { eventModel } from "../models/events";
+import { eventModel, Statuses } from "../models/events";
 import { paymentModel, PaymentStatuses } from "../models/payments";
 import { ticketModel } from "../models/tickets";
 // Called through the namespace so tests can make ticket issuing fail on demand.
@@ -10,9 +10,11 @@ import { ProviderError } from "./providers/types";
 import type { StatusResult } from "./providers/types";
 
 export const STALE_PENDING_MINUTES = 30;
+/** An ISSUING record untouched this long is assumed orphaned by a crash and may be reclaimed. */
+export const ISSUING_RECLAIM_MINUTES = 2;
 /** A stale Lumicash payment is re-verified at most this often... */
 export const STALE_VERIFY_INTERVAL_MINUTES = 10;
-/** ...and at most this many per sweep, because the sweep runs inline before every new payment. */
+/** ...and at most this many per sweep, so one sweep cannot hammer the provider. */
 export const STALE_VERIFY_BATCH = 3;
 
 /** Rethrows anything a provider call throws as a ProviderError, so routes can tell upstream faults from ours. */
@@ -45,7 +47,7 @@ export async function reserveCapacity(eventId: any, packageId: any, quantity: nu
 }
 
 /** Claims the reservation flag first, so concurrent releases of one payment free its seats only once. */
-async function releaseReservation(payment: any) {
+export async function releaseReservation(payment: any) {
   const claimed = await paymentModel.updateOne({ _id: payment._id, reserved: true }, { $set: { reserved: false } });
   if (claimed.modifiedCount !== 1) return;
   const packageId = payment.ticketPackage?._id;
@@ -57,55 +59,81 @@ async function releaseReservation(payment: any) {
   }
 }
 
-/** Frees seats held by payments that never completed. Cheap enough to run before every new request. */
-export async function releaseStalePayments() {
+/**
+ * Frees seats held by payments that never completed. MoMo/mock expiry is cheap and runs inline.
+ * Lumicash verification can take several provider round trips, so by default it runs in the
+ * background and never delays the request that triggered the sweep; tests pass awaitVerify.
+ */
+export async function releaseStalePayments({ awaitVerify = false }: { awaitVerify?: boolean } = {}) {
   const cutoff = new Date(Date.now() - STALE_PENDING_MINUTES * 60 * 1000);
   const stale = await paymentModel
     .find({ status: PaymentStatuses.pending, reserved: true, createdAt: { $lt: cutoff } })
     .sort({ _id: 1 });
   const verifyCutoff = new Date(Date.now() - STALE_VERIFY_INTERVAL_MINUTES * 60 * 1000);
-  const toVerify = new Set(
-    stale
-      .filter((p) => p.provider === "lumicash" && !(p.lastVerifiedAt && p.lastVerifiedAt >= verifyCutoff))
-      .sort((a, b) => (a.lastVerifiedAt?.getTime() ?? 0) - (b.lastVerifiedAt?.getTime() ?? 0))
-      .slice(0, STALE_VERIFY_BATCH)
-      .map((p) => String(p._id))
-  );
+  const toVerify = stale
+    .filter((p) => p.provider === "lumicash" && !(p.lastVerifiedAt && p.lastVerifiedAt >= verifyCutoff))
+    .sort((a, b) => (a.lastVerifiedAt?.getTime() ?? 0) - (b.lastVerifiedAt?.getTime() ?? 0))
+    .slice(0, STALE_VERIFY_BATCH);
+
   let released = 0;
   for (const payment of stale) {
-    if (payment.provider === "lumicash") {
-      if (!toVerify.has(String(payment._id)) || !(await lumicashConfirmsFailed(payment, verifyCutoff))) continue;
-    }
-    // Conditional, so a payment that settled meanwhile is neither expired nor released.
-    const expired = await paymentModel.updateOne(
-      { _id: payment._id, status: PaymentStatuses.pending },
-      { $set: { status: PaymentStatuses.expired } }
-    );
-    if (expired.modifiedCount !== 1) continue;
-    await releaseReservation(payment);
-    released++;
+    if (payment.provider === "lumicash") continue;
+    if (await expireAndRelease(payment)) released++;
   }
+
+  const verifying = verifyStaleLumicash(toVerify, verifyCutoff);
+  if (awaitVerify) return released + (await verifying);
+  verifying.catch(() => console.error("Background Lumicash stale verification failed"));
   return released;
+}
+
+/** Conditional, so a payment that settled meanwhile is neither expired nor released. */
+async function expireAndRelease(payment: any) {
+  const expired = await paymentModel.updateOne(
+    { _id: payment._id, status: PaymentStatuses.pending },
+    { $set: { status: PaymentStatuses.expired } }
+  );
+  if (expired.modifiedCount !== 1) return false;
+  await releaseReservation(payment);
+  return true;
 }
 
 /**
  * A Lumicash cashout is synchronous, so a stale pending one may already have debited the wallet.
- * Only a verify that says failed lets it expire; anything else leaves it for an admin to resolve.
- * Stamping lastVerifiedAt first means concurrent sweeps never verify the same payment twice.
+ * Only a verify that says failed lets it expire; one that says successful issues the tickets;
+ * anything else leaves it for an admin to resolve. Returns how many were expired.
  */
-async function lumicashConfirmsFailed(payment: any, verifyCutoff: Date) {
+async function verifyStaleLumicash(payments: any[], verifyCutoff: Date) {
+  let released = 0;
+  for (const payment of payments) {
+    try {
+      const outcome = await verifyStale(payment, verifyCutoff);
+      if (outcome === "failed" && (await expireAndRelease(payment))) released++;
+    } catch {
+      console.error(`Stale verification failed for refId ${payment.refId}`);
+    }
+  }
+  return released;
+}
+
+/** Stamping lastVerifiedAt first means concurrent sweeps never verify the same payment twice. */
+async function verifyStale(payment: any, verifyCutoff: Date) {
   const provider = getProvider("lumicash");
-  if (!provider) return false;
+  if (!provider) return "pending";
   const stamped = await paymentModel.updateOne(
     { _id: payment._id, $or: [{ lastVerifiedAt: null }, { lastVerifiedAt: { $lt: verifyCutoff } }] },
     { $set: { lastVerifiedAt: new Date() } }
   );
-  if (stamped.modifiedCount !== 1) return false;
+  if (stamped.modifiedCount !== 1) return "pending";
+  let result: StatusResult;
   try {
-    return (await provider.status(payment)).outcome === "failed";
+    result = await provider.status(payment);
   } catch {
-    return false;
+    return "pending";
   }
+  // The wallet was debited: settle so the buyer gets tickets rather than waiting on an admin.
+  if (result.outcome === "successful") await settlePayment(payment, result);
+  return result.outcome;
 }
 
 export async function successfulResponse(payment: any) {
@@ -149,10 +177,15 @@ export async function settlePayment(payment: any, result: StatusResult): Promise
     return { code: 200, body: { ...raw, status: "PENDING" } };
   }
 
+  await retakeReleasedSeats(claimed);
+
   const phone = result.payerPhone ?? claimed.phone ?? undefined;
   try {
-    const tickets = await ticketService.issueTickets({
-      quantity: claimed.quantity,
+    // A crash mid-issue leaves some tickets behind; reuse them so a retry never issues twice.
+    const existing = await ticketModel.find({ momoRef: refId }).sort({ number: 1 });
+    const shortfall = Math.max(0, claimed.quantity - existing.length);
+    const created = shortfall === 0 ? [] : await ticketService.issueTickets({
+      quantity: shortfall,
       ticketPackage: claimed.ticketPackage,
       event: claimed.event,
       momoPayload: raw,
@@ -168,6 +201,7 @@ export async function settlePayment(payment: any, result: StatusResult): Promise
         phone,
       },
     });
+    const tickets = [...existing, ...created];
     claimed.tickets = tickets.map((t) => t._id);
     claimed.status = PaymentStatuses.successful;
     claimed.providerRef = result.providerRef;
@@ -178,6 +212,28 @@ export async function settlePayment(payment: any, result: StatusResult): Promise
     await paymentModel.updateOne({ refId }, { $set: { status: PaymentStatuses.pending, issueError: `${err}` } });
     return { code: 500, body: { errorMessage: `Payment succeeded but ticket issue failed: ${err}`, refId } };
   }
+}
+
+/**
+ * A payment that expired or failed gave its seats back. If the provider later says it was paid,
+ * the buyer still gets tickets, so the seats are taken again even past capacity (money first).
+ */
+async function retakeReleasedSeats(claimed: any) {
+  const packageId = claimed.ticketPackage?._id;
+  if (claimed.reserved || !claimed.event || !packageId) return;
+  const hasCapacity = await eventModel.exists({
+    _id: claimed.event,
+    packages: { $elemMatch: { _id: packageId, capacity: { $type: "number" } } },
+  });
+  if (!hasCapacity) return;
+  const flagged = await paymentModel.updateOne({ _id: claimed._id, reserved: false }, { $set: { reserved: true } });
+  if (flagged.modifiedCount !== 1) return;
+  claimed.reserved = true;
+  await eventModel.updateOne(
+    { _id: claimed.event, "packages._id": packageId },
+    { $inc: { "packages.$.sold": claimed.quantity } }
+  );
+  console.warn(`Late success re-took released seats for refId ${claimed.refId}`);
 }
 
 export const MAX_QUANTITY = 6;
@@ -212,6 +268,10 @@ export async function startPayment(r: StartRequest): Promise<{ code: number; bod
   const pkgDoc: any = event?.packages?.find((p: any) => String(p._id) === String(r.packageId));
   if (!event || !pkgDoc || typeof pkgDoc.price !== "number") return badRequest("Choose a ticket package");
   const pkg = pkgDoc.toObject();
+  // Legacy events have no `published` field and count as published.
+  if (event.published === false || event.status === Statuses.cancelled) return badRequest("This event is not on sale");
+  if (event.date && event.date.getTime() < Date.now()) return badRequest("This event has ended");
+  if (pkg.soldOut) return { code: 409, body: { errorMessage: `${pkg.title} is sold out` } };
   const currency = String(pkg.currency || "");
   if (provider.currencies.length && !provider.currencies.includes(currency)) {
     return badRequest(`${provider.label} cannot take ${currency}`);
@@ -277,7 +337,17 @@ export async function checkPayment(refId: string): Promise<{ code: number; body:
     return { code: 200, body: await successfulResponse(payment) };
   }
   if (payment.status === PaymentStatuses.issuing) {
-    return { code: 200, body: { ...(payment.momoPayload || {}), status: "PENDING" } };
+    // An issuer that crashed mid-issue leaves ISSUING behind; after a grace period anyone may take over.
+    const cutoff = new Date(Date.now() - ISSUING_RECLAIM_MINUTES * 60 * 1000);
+    const reclaimed = await paymentModel.updateOne(
+      { refId: payment.refId, status: PaymentStatuses.issuing, updatedAt: { $lt: cutoff } },
+      { $set: { status: PaymentStatuses.pending } }
+    );
+    if (reclaimed.modifiedCount !== 1) {
+      return { code: 200, body: { ...(payment.momoPayload || {}), status: "PENDING" } };
+    }
+    console.warn(`Reclaimed a stuck ISSUING payment, refId ${payment.refId}`);
+    payment.status = PaymentStatuses.pending;
   }
   const provider = getProvider(payment.provider);
   if (!provider) return { code: 409, body: { errorMessage: "Payment method no longer available" } };

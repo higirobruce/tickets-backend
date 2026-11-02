@@ -4,8 +4,8 @@ import { ensureUserAuthorized, publicUser, requireRole, ROLES } from "../middlew
 import { userModel } from "../models/users";
 import { eventModel } from "../models/events";
 import { ticketModel } from "../models/tickets";
-import { paymentModel } from "../models/payments";
-import { checkPayment } from "../services/payments";
+import { paymentModel, PaymentStatuses } from "../models/payments";
+import { checkPayment, releaseReservation } from "../services/payments";
 import { fail } from "./routePayments";
 import { isPaid, paidAmount, paidCurrency, revenueByCurrency, Revenue } from "../services/reporting";
 
@@ -99,7 +99,7 @@ router.get("/payments", async (req, res, next) => {
   try {
     const payments = await paymentModel
       .find(filter)
-      .select("refId provider providerRef status amount currency phone event quantity issueError createdAt updatedAt")
+      .select("refId provider providerRef status amount currency phone event quantity issueError releasedBy releasedAt createdAt updatedAt")
       .sort({ createdAt: -1 })
       .limit(limit);
     res.send({ payments });
@@ -115,6 +115,29 @@ router.post("/payments/:refId/verify", async (req, res, next) => {
     res.status(r.code).send(r.body);
   } catch (err) {
     fail(res, next, err);
+  }
+});
+
+/**
+ * Gives up on a pending payment whose provider never answers (e.g. a Lumicash verify that keeps
+ * timing out) so its seats go back on sale. It never issues tickets: there is no "mark as paid".
+ */
+router.post("/payments/:refId/release", async (req, res, next) => {
+  const refId = String(req.params.refId);
+  try {
+    const released = await paymentModel.findOneAndUpdate(
+      { refId, status: PaymentStatuses.pending },
+      { $set: { status: PaymentStatuses.expired, releasedBy: req.user!._id, releasedAt: new Date() } },
+      { returnDocument: "after" }
+    );
+    if (!released) {
+      if (!(await paymentModel.exists({ refId }))) return res.status(404).send({ errorMessage: "Unknown payment reference" });
+      return res.status(409).send({ errorMessage: "Only a pending payment can be released" });
+    }
+    await releaseReservation(released);
+    res.send({ refId, status: PaymentStatuses.expired });
+  } catch (err) {
+    next(err);
   }
 });
 

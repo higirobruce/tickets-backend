@@ -1,4 +1,5 @@
 import type { PaymentProvider, StatusResult } from "./types";
+import { ProviderConfigError } from "./types";
 import { backendUrl } from "../tickets";
 
 const momoBase = () => process.env.MOMO_BASE_URL || "";
@@ -43,7 +44,13 @@ function currencies(): string[] {
   return list.length ? list : ["RWF"];
 }
 
+const REQUIRED = ["MOMO_BASE_URL", "MOMO_SUBSCRIPTION_KEY", "MOMO_ENVIRONMENT", "MOMO_API_USER", "MOMO_BASIC_AUTH"] as const;
+
 export function momoProvider(): PaymentProvider {
+  // Checked when the registry builds the provider, so a missing key fails at startup, not mid-payment.
+  for (const key of REQUIRED) {
+    if (!process.env[key]) throw new ProviderConfigError(`MoMo needs ${key}`);
+  }
   return {
     id: "momo",
     label: "MTN MoMo",

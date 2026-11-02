@@ -9,6 +9,10 @@ process.env.JWT_SECRET = "test-secret";
 process.env.TICKETS_WEB_URL = "http://web.test";
 process.env.TICKETS_BCKEND_URL = "http://api.test";
 process.env.MOMO_BASE_URL = "http://momo.test";
+process.env.MOMO_SUBSCRIPTION_KEY = "test-sub-key";
+process.env.MOMO_ENVIRONMENT = "sandbox";
+process.env.MOMO_API_USER = "test-api-user";
+process.env.MOMO_BASIC_AUTH = "dGVzdDp0ZXN0";
 
 const TEST_DB =
   process.env.TICKETS_TEST_DB || "mongodb://localhost:27017/tickets_test";

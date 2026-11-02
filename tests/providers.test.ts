@@ -97,4 +97,17 @@ describe("startup config check", () => {
     expect(() => enabledProviders()).toThrow(ProviderConfigError);
     expect(() => enabledProviders()).toThrow(/LUMICASH_BASE_URL/);
   });
+  it("momo with a missing MOMO_* key throws ProviderConfigError naming it", () => {
+    process.env.PAYMENT_PROVIDERS = "momo";
+    delete process.env.MOMO_SUBSCRIPTION_KEY;
+    expect(() => enabledProviders()).toThrow(ProviderConfigError);
+    expect(() => enabledProviders()).toThrow(/MOMO_SUBSCRIPTION_KEY/);
+  });
+  it("PAYMENT_PROVIDERS of only separators is a config error, not zero providers", () => {
+    for (const raw of [",", " , ,"]) {
+      process.env.PAYMENT_PROVIDERS = raw;
+      expect(() => enabledProviderIds()).toThrow(ProviderConfigError);
+      expect(() => enabledProviderIds()).toThrow("PAYMENT_PROVIDERS is empty");
+    }
+  });
 });

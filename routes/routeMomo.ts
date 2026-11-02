@@ -28,6 +28,9 @@ router.post("/requestToPay", async (req, res, next) => {
   if (!paymentPayload?.amount || !paymentPayload?.payer?.partyId) {
     return res.status(400).send({ errorMessage: "amount and payer.partyId are required" });
   }
+  if (!Number.isFinite(Number(paymentPayload.amount))) {
+    return res.status(400).send({ errorMessage: "amount must be a number" });
+  }
   // PAYMENTS_MODE=mock enables only the mock provider, so momo missing means test mode.
   const provider = getProvider("momo") ?? getProvider("mock");
   if (!provider) return res.status(400).send({ errorMessage: "MoMo is not enabled" });

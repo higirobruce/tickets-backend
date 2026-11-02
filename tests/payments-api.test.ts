@@ -5,6 +5,7 @@ import { ticketModel } from "../models/tickets";
 import { eventModel } from "../models/events";
 import { resetProviders } from "../services/providers/registry";
 import { api, seedEvent } from "./helpers";
+import { ISSUING_RECLAIM_MINUTES } from "../services/payments";
 import { fetchMock } from "./setup";
 import { LUMI_ENV } from "./lumicashEnv";
 vi.mock("../services/sms", () => ({ default: vi.fn() }));
@@ -124,6 +125,9 @@ describe("POST /payments/start", () => {
     Object.assign(process.env, LUMI_ENV); resetProviders();
     lumiOk({ ResponseCode: "01", ResponseMessage: JSON.stringify({ accountName: "A B" }) });
     expect((await api().post("/payments/lookup").send({ provider: "lumicash", phone: "68191919" })).body).toEqual({ ok: true, name: "A B" });
+    lumiOk({ ResponseCode: "01", ResponseMessage: JSON.stringify({}) });
+    const nameless = await api().post("/payments/lookup").send({ provider: "lumicash", phone: "68191919" });
+    expect(nameless.body).toEqual({ ok: true }); expect("name" in nameless.body).toBe(false);
     process.env.PAYMENT_PROVIDERS = "mock"; resetProviders();
     expect((await api().post("/payments/lookup").send({ provider: "mock", phone: "788123456" })).status).toBe(400);
   });
@@ -136,7 +140,7 @@ describe("POST /payments/start", () => {
     fetchMock.mockRejectedValueOnce(new Error("ECONNREFUSED"));                                  // first record
     lumiOk({ ResponseCode: "01", Status: "02", ResponseMessage: "Transaction failed" });        // second record
     const { releaseStalePayments } = await import("../services/payments");
-    await releaseStalePayments();
+    await releaseStalePayments({ awaitVerify: true });
     expect((await paymentModel.findOne({ refId: "verify-unreachable" }))!.status).toBe("PENDING");
     expect((await paymentModel.findOne({ refId: "verify-failed" }))!.status).toBe("EXPIRED");
   });
@@ -190,11 +194,11 @@ describe("seat release and stale verification", () => {
       await paymentModel.create({ refId, provider: "lumicash", reserved: true, event: event._id, ticketPackage: event.packages[0], quantity: 1, createdAt: old() });
     }
     fetchMock.mockRejectedValue(new Error("ECONNREFUSED"));                // every verify stays pending
-    await releaseStalePayments();
+    await releaseStalePayments({ awaitVerify: true });
     expect(fetchMock).toHaveBeenCalledTimes(3);
-    await releaseStalePayments();                                            // only s4 has never been verified
+    await releaseStalePayments({ awaitVerify: true });                       // only s4 has never been verified
     expect(fetchMock).toHaveBeenCalledTimes(4);
-    await releaseStalePayments();
+    await releaseStalePayments({ awaitVerify: true });
     expect(fetchMock).toHaveBeenCalledTimes(4);
     expect(await paymentModel.countDocuments({ status: "PENDING", reserved: true })).toBe(4);
   });
@@ -209,5 +213,131 @@ describe("seat release and stale verification", () => {
     const res = await api().get("/payments/whatever");
     expect(res.status).toBe(500);
     boom.mockRestore(); quiet.mockRestore();
+  });
+});
+
+describe("sale checks on /payments/start", () => {
+  const start = (event: any, pkg: any) =>
+    api().post("/payments/start").send({ provider: "mock", eventId: String(event._id), packageId: String(pkg._id), phone: "788123456" });
+  it("a package the organiser marked sold out is refused with 409", async () => {
+    process.env.PAYMENT_PROVIDERS = "mock"; resetProviders();
+    const event = await seedEvent({ packages: [{ title: "VIP", price: 5000, currency: "RWF", soldOut: true }] });
+    const res = await start(event, event.packages[0]);
+    expect(res.status).toBe(409); expect(res.body).toEqual({ errorMessage: "VIP is sold out" });
+    expect(await paymentModel.countDocuments()).toBe(0);
+  });
+  it("an unpublished or cancelled event is not on sale; a legacy event without published is", async () => {
+    process.env.PAYMENT_PROVIDERS = "mock"; resetProviders();
+    for (const overrides of [{ published: false }, { status: "cancelled" }]) {
+      const event = await seedEvent(overrides);
+      const res = await start(event, event.packages[0]);
+      expect(res.status).toBe(400); expect(res.body).toEqual({ errorMessage: "This event is not on sale" });
+    }
+    const legacy = await seedEvent();
+    await eventModel.collection.updateOne({ _id: legacy._id }, { $unset: { published: "" } });
+    expect((await start(legacy, legacy.packages[0])).status).toBe(200);
+    expect(await paymentModel.countDocuments()).toBe(1);
+  });
+  it("an event whose date has passed has ended", async () => {
+    process.env.PAYMENT_PROVIDERS = "mock"; resetProviders();
+    const event = await seedEvent({ date: new Date(Date.now() - 60 * 60 * 1000) });
+    const res = await start(event, event.packages[0]);
+    expect(res.status).toBe(400); expect(res.body).toEqual({ errorMessage: "This event has ended" });
+  });
+});
+
+describe("crash recovery and late outcomes", () => {
+  const capped = () => seedEvent({ packages: [{ title: "Regular", price: 5000, currency: "RWF", capacity: 5, sold: 2 }] });
+  const mockPayment = (event: any, refId: string, quantity = 2) =>
+    paymentModel.create({ refId, provider: "mock", amount: 5000 * quantity, currency: "RWF", phone: "250788123456", event: event._id, ticketPackage: event.packages[0], quantity, reserved: true });
+  const forceIssuing = (refId: string, ageMs: number) =>
+    paymentModel.collection.updateOne({ refId }, { $set: { status: "ISSUING", updatedAt: new Date(Date.now() - ageMs) } });
+
+  it("an ISSUING record orphaned past the reclaim window is reclaimed and settled exactly once", async () => {
+    process.env.PAYMENT_PROVIDERS = "mock"; resetProviders();
+    expect(ISSUING_RECLAIM_MINUTES).toBe(2);
+    const event = await capped();
+    await mockPayment(event, "orphan");
+    await forceIssuing("orphan", 5 * 60 * 1000);
+    const res = await api().get("/payments/orphan");
+    expect(res.status).toBe(200); expect(res.body.status).toBe("SUCCESSFUL"); expect(res.body.tickets).toHaveLength(2);
+    expect(new Set(res.body.tickets.map((t: any) => t.number)).size).toBe(2);
+    expect((await api().get("/payments/orphan")).body.tickets).toHaveLength(2);
+    expect(await ticketModel.countDocuments({ momoRef: "orphan" })).toBe(2);
+    expect((await eventModel.findById(event._id))!.packages[0].sold).toBe(2);
+  });
+  it("a young ISSUING record still answers PENDING and issues nothing", async () => {
+    process.env.PAYMENT_PROVIDERS = "mock"; resetProviders();
+    const event = await capped();
+    await mockPayment(event, "busy");
+    await forceIssuing("busy", 10 * 1000);
+    const res = await api().get("/payments/busy");
+    expect(res.status).toBe(200); expect(res.body.status).toBe("PENDING");
+    expect((await paymentModel.findOne({ refId: "busy" }))!.status).toBe("ISSUING");
+    expect(await ticketModel.countDocuments()).toBe(0);
+  });
+  it("a crash after one of two tickets was written tops up to exactly two on the next poll", async () => {
+    process.env.PAYMENT_PROVIDERS = "mock"; resetProviders();
+    const event = await capped();
+    await mockPayment(event, "half");
+    const tickets = await import("../services/tickets");
+    const real = tickets.issueTickets;
+    const spy = vi.spyOn(tickets, "issueTickets").mockImplementationOnce(async (opts) => {
+      await real({ ...opts, quantity: 1 });
+      throw new Error("crashed after the first ticket");
+    });
+    const first = await api().get("/payments/half");
+    expect(first.status).toBe(500);
+    expect(await ticketModel.countDocuments({ momoRef: "half" })).toBe(1);
+    spy.mockRestore();
+    const res = await api().get("/payments/half");
+    expect(res.body.status).toBe("SUCCESSFUL"); expect(res.body.tickets).toHaveLength(2);
+    expect(await ticketModel.countDocuments({ momoRef: "half" })).toBe(2);
+    expect((await paymentModel.findOne({ refId: "half" }))!.tickets).toHaveLength(2);
+  });
+  it("a late success on a swept record takes its seats back and issues", async () => {
+    const event = await seedEvent({ packages: [{ title: "Regular", price: 5000, currency: "RWF", capacity: 2, sold: 1 }] });
+    const p = await paymentModel.create({ refId: "late-win", provider: "momo", event: event._id, ticketPackage: event.packages[0], quantity: 1, reserved: true, createdAt: new Date(Date.now() - 31 * 60 * 1000) });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await releaseStalePayments();
+    expect((await eventModel.findById(event._id))!.packages[0].sold).toBe(0);
+    const r = await settlePayment(p, { outcome: "successful", providerRef: "FT9", raw: {} });
+    expect(r.body.status).toBe("SUCCESSFUL"); expect(r.body.tickets).toHaveLength(1);
+    expect((await eventModel.findById(event._id))!.packages[0].sold).toBe(1);
+    const rec = (await paymentModel.findOne({ refId: "late-win" }))!;
+    expect(rec.status).toBe("SUCCESSFUL"); expect(rec.reserved).toBe(true);
+    expect(warn.mock.calls.flat().join(" ")).toContain("late-win");
+    warn.mockRestore();
+  });
+});
+
+describe("background stale verification", () => {
+  const stale = async (refId: string) => {
+    const event = await seedEvent({ packages: [{ title: "VIP", price: 7000, currency: "BIF", capacity: 3, sold: 1 }] });
+    const old = new Date(Date.now() - 31 * 60 * 1000);
+    await paymentModel.create({ refId, provider: "lumicash", status: "PENDING", reserved: true, amount: 7000, currency: "BIF", phone: "25768191919", event: event._id, ticketPackage: event.packages[0], quantity: 1, momoPayload: { requestId: refId, createdDate: old.toISOString() }, createdAt: old });
+    return event;
+  };
+
+  it("by default the sweep returns before the Lumicash verify answers", async () => {
+    Object.assign(process.env, LUMI_ENV); resetProviders();
+    await stale("slow");
+    let answer!: (v: any) => void;
+    fetchMock.mockReturnValueOnce(new Promise((resolve) => { answer = resolve; }));
+    await releaseStalePayments();
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect((await paymentModel.findOne({ refId: "slow" }))!.status).toBe("PENDING");
+    answer(ok({ ResponseCode: "01", Status: "02", ResponseMessage: "Transaction failed" }));
+    await vi.waitFor(async () => expect((await paymentModel.findOne({ refId: "slow" }))!.status).toBe("EXPIRED"));
+  });
+  it("a stale Lumicash payment whose verify says successful is settled with tickets", async () => {
+    Object.assign(process.env, LUMI_ENV); resetProviders();
+    const event = await stale("paid-late");
+    fetchMock.mockResolvedValueOnce(ok({ ResponseCode: "01", Status: "01", TransCode: "T9", TransAmount: 7000 }));
+    await releaseStalePayments({ awaitVerify: true });
+    const rec = (await paymentModel.findOne({ refId: "paid-late" }))!;
+    expect(rec.status).toBe("SUCCESSFUL"); expect(rec.tickets).toHaveLength(1);
+    expect(await ticketModel.countDocuments({ momoRef: "paid-late" })).toBe(1);
+    expect((await eventModel.findById(event._id))!.packages[0].sold).toBe(1);
   });
 });

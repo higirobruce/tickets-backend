@@ -146,3 +146,12 @@ describe("MoMo payment flow", () => {
     expect(payment?.status).toBe(PaymentStatuses.failed);
   });
 });
+
+describe("legacy requestToPay input", () => {
+  it("a non-numeric amount is a 400, not a 500", async () => {
+    const res = await api().post("/momo/requestToPay").send({ amount: "abc", currency: "RWF", payer: { partyIdType: "MSISDN", partyId: "250788123456" } });
+    expect(res.status).toBe(400); expect(res.body).toEqual({ errorMessage: "amount must be a number" });
+    expect(await paymentModel.countDocuments()).toBe(0);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});

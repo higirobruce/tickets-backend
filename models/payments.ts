@@ -38,6 +38,9 @@ export const paymentSchema = new mongoose.Schema(
     buyer: { name: String, email: String },
     /** When the stale sweep last asked the provider about this payment; throttles re-verification. */
     lastVerifiedAt: Date,
+    /** Admin who expired a stuck pending payment by hand, and when. */
+    releasedBy: { type: mongoose.Types.ObjectId, ref: "users" },
+    releasedAt: Date,
   },
   { timestamps: true }
 );

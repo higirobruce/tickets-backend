@@ -2,7 +2,7 @@ import "dotenv/config";
 import mongoose from "mongoose";
 import app from "./app";
 import { jwtSecret } from "./middleware/auth";
-import { enabledProviders } from "./services/providers/registry";
+import { enabledProviderIds, enabledProviders } from "./services/providers/registry";
 import { ProviderConfigError } from "./services/providers/types";
 import { smsRoutes } from "./services/sms/routes";
 
@@ -13,8 +13,13 @@ const mongoDB =
   (process.env.TICKETS_DB as string) || "mongodb://localhost:27017/tickets";
 
 jwtSecret(); // fail fast in production when it is missing
-if (process.env.PAYMENTS_MODE === "mock") {
-  console.warn("PAYMENTS_MODE=mock: MTN MoMo is bypassed, every purchase is treated as paid. Testing only.");
+// enabledProviderIds covers both PAYMENTS_MODE=mock and PAYMENT_PROVIDERS containing mock.
+try {
+  if (enabledProviderIds().includes("mock")) {
+    console.warn("The mock payment provider is enabled: every purchase with it is treated as paid. Testing only.");
+  }
+} catch {
+  // A bad PAYMENT_PROVIDERS is reported by the config check below.
 }
 
 // Fail fast on a bad payment/SMS config instead of at the first purchase. Tests build providers per file.
