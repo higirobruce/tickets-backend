@@ -66,8 +66,12 @@ export function toRequestId(refId: string): string {
   return refId.replace(/-/g, "");
 }
 
-/** The spec's samples disagree on whether the 257 prefix is sent, so the sandbox decides via env. */
-export function customerMobile(local: string): string {
-  const digits = local.replace(/\D/g, "");
+/**
+ * The spec's samples disagree on whether the 257 prefix is sent, so the sandbox decides via env.
+ * Accepts the 8 local digits or the full 257 number (what /payments/start passes), never doubling the prefix.
+ */
+export function customerMobile(phone: string): string {
+  const all = phone.replace(/\D/g, "");
+  const digits = all.length === 11 && all.startsWith("257") ? all.slice(3) : all;
   return process.env.LUMICASH_MSISDN_FORMAT === "local" ? digits : `257${digits}`;
 }

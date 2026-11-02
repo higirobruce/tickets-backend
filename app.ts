@@ -7,6 +7,7 @@ import mongoose from "mongoose";
 import usersRoute from "./routes/routeUsers";
 import eventsRoute from "./routes/routeEvents";
 import momoRoute from "./routes/routeMomo";
+import paymentsRoute from "./routes/routePayments";
 import ticketsRoute from "./routes/routeTickets";
 import adminRoute from "./routes/routeAdmin";
 
@@ -52,11 +53,15 @@ app.get("/health", (req: Request, res: Response) => {
 // Credential and payment endpoints get tight limits; everything else a generous one.
 app.use(["/users/login", "/users/register", "/users"], limiter(20));
 app.use("/momo", limiter(60));
+// Lookup names a wallet holder, so it is limited hard against enumeration.
+app.use("/payments/lookup", limiter(10, 1));
+app.use("/payments", limiter(60));
 app.use(limiter(600));
 
 app.use("/users", usersRoute);
 app.use("/events", eventsRoute);
 app.use("/momo", momoRoute);
+app.use("/payments", paymentsRoute);
 app.use("/tickets", ticketsRoute);
 app.use("/admin", adminRoute);
 

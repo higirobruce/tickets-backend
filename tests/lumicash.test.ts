@@ -24,8 +24,10 @@ describe("lumicash signing", () => {
   it("request id drops hyphens; mobile gains 257 unless LUMICASH_MSISDN_FORMAT=local", () => {
     expect(toRequestId("3f2a-77")).toBe("3f2a77");
     expect(customerMobile("68191919")).toBe("25768191919");
+    expect(customerMobile("25768191919")).toBe("25768191919");
     process.env.LUMICASH_MSISDN_FORMAT = "local";
     expect(customerMobile("68191919")).toBe("68191919");
+    expect(customerMobile("25768191919")).toBe("68191919");
   });
 });
 
