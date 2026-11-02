@@ -78,4 +78,46 @@ describe("lumicash provider", () => {
     fetchMock.mockResolvedValueOnce(ok({ ResponseCode: "999" }));
     expect((await p.status({ refId: "x", momoPayload: {} })).outcome).toBe("pending");
   });
+  it("status keeps the stored created date and request id in raw on every branch", async () => {
+    const p = getProvider("lumicash")!;
+    const stored = { createdDate: "2026-11-02T22:30:00.000Z", requestId: "3f2a77" };
+    const payment = { refId: "3f2a-77", amount: 7000, momoPayload: stored };
+    fetchMock.mockResolvedValueOnce(ok({ ResponseCode: "999" }));
+    const pending = await p.status(payment);
+    expect(pending.outcome).toBe("pending"); expect(pending.raw).toMatchObject(stored);
+    fetchMock.mockResolvedValueOnce(ok({ ResponseCode: "01", Status: "02", ResponseMessage: "Failed" }));
+    const failed = await p.status(payment);
+    expect(failed).toMatchObject({ outcome: "failed", reason: "Failed" }); expect(failed.raw).toMatchObject(stored);
+    fetchMock.mockRejectedValueOnce(new Error("ETIMEDOUT"));
+    const errored = await p.status(payment);
+    expect(errored.outcome).toBe("pending"); expect(errored.raw).toMatchObject(stored);
+  });
+  it("status success falls back to the stored amount and ref when Lumicash omits them", async () => {
+    fetchMock.mockResolvedValueOnce(ok({ ResponseCode: "01", Status: "01" }));
+    const r = await getProvider("lumicash")!.status({ refId: "3f2a-77", amount: 7000, momoPayload: { requestId: "3f2a77" } });
+    expect(r).toMatchObject({ outcome: "successful", amount: 7000, providerRef: "3f2a77" });
+  });
+  it("start leaves unknown outcomes pending and calls Lumicash once", async () => {
+    const p = getProvider("lumicash")!; const go = () => p.start({ refId: "x", amount: 1, currency: "BIF", phone: "68191919", description: "" });
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 502, statusText: "Bad Gateway", json: async () => ({ Message: "An error has occurred." }) });
+    const bad = await go();
+    expect(bad.outcome).toBe("pending"); expect(bad.raw.httpStatus).toBe(502); expect(fetchMock).toHaveBeenCalledTimes(1);
+    fetchMock.mockResolvedValueOnce(ok({ ResponseCode: "77" }));
+    expect((await go()).outcome).toBe("pending");
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, statusText: "OK", json: async () => { throw new SyntaxError("Unexpected token <"); } });
+    expect((await go()).outcome).toBe("pending");
+    fetchMock.mockResolvedValueOnce(ok({ ResponseMessage: "no code" }));
+    expect((await go()).outcome).toBe("pending");
+    fetchMock.mockResolvedValueOnce(ok({ ResponseCode: "00", ResponseMessage: "m" }));
+    expect(await go()).toMatchObject({ outcome: "failed", reason: "Lumicash error" });
+    expect(fetchMock).toHaveBeenCalledTimes(5);
+  });
+  it("start signs and sends the same rounded integer amount", async () => {
+    fetchMock.mockResolvedValueOnce(ok({ ResponseCode: "01", RequestId: "1" }));
+    await getProvider("lumicash")!.start({ refId: "x", amount: 7000.4, currency: "BIF", phone: "68191919", description: "" });
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body);
+    expect(body.Amount).toBe(7000);
+    const createdAt = new Date(Number(/\((\d+)/.exec(body.CreatedDate)![1]));
+    expect(body.Signature).toBe(sign({ key: "secret", createdAt, amount: 7000, customerMobile: "25768191919", agentCode: "89503", partner: "EVENTIXR", requestType: 1, requestId: "x" }));
+  });
 });

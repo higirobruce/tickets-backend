@@ -1,6 +1,6 @@
 import type { PaymentProvider, StartResult, StatusResult } from "./types";
 import { ProviderConfigError } from "./types";
-import { customerMobile, formatBodyDate, formatTransDate, sign, toRequestId } from "./lumicashSign";
+import { customerMobile, formatAmount, formatBodyDate, formatTransDate, sign, toRequestId } from "./lumicashSign";
 
 const REQUIRED = [
   "LUMICASH_BASE_URL",
@@ -15,14 +15,23 @@ const REQUIRED = [
 
 const OVER_LIMIT = ["17", "24", "25", "26", "31", "32", "35"];
 
-/** Maps a non-01 cashout code to the reason shown to the buyer. */
-function failReason(code: string): string {
+/**
+ * Reason for a documented cashout failure code, or undefined for anything else.
+ * Undocumented outcomes stay pending because the wallet may already have been debited.
+ */
+function failReason(code: string): string | undefined {
   if (code === "10") return "Insufficient balance";
   if (code === "03" || code === "04") return "Wallet not found or locked";
   if (code === "02") return "Lumicash rejected the signature";
   if (OVER_LIMIT.includes(code)) return "Over the wallet's limit";
-  return "Lumicash error";
+  if (code === "00") return "Lumicash error";
+  return undefined;
 }
+
+const isPlainObject = (v: unknown): v is Record<string, any> =>
+  typeof v === "object" && v !== null && !Array.isArray(v);
+
+interface LumiReply { ok: boolean; httpStatus: number; body: Record<string, any> | undefined }
 
 /** Reads config once when the registry builds the provider, so a missing key fails at startup, not mid-payment. */
 function readConfig() {
@@ -46,15 +55,24 @@ function readConfig() {
 export function lumicashProvider(): PaymentProvider {
   const cfg = readConfig();
 
-  /** One POST, no retries: a cashout must reach Lumicash at most once per refId. Throws on network error or non-JSON. */
-  async function post(path: string, body: unknown): Promise<any> {
+  /**
+   * One POST, no retries: a cashout must reach Lumicash at most once per refId.
+   * Throws only on network error or timeout; a body that is not a JSON object comes back as undefined.
+   */
+  async function post(path: string, body: unknown): Promise<LumiReply> {
     const response = await fetch(`${cfg.baseUrl}${path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: cfg.authorization },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(cfg.timeoutMs),
     });
-    return response.json();
+    let parsed: unknown;
+    try {
+      parsed = await response.json();
+    } catch {
+      parsed = undefined;
+    }
+    return { ok: response.ok, httpStatus: response.status, body: isPlainObject(parsed) ? parsed : undefined };
   }
 
   return {
@@ -65,7 +83,8 @@ export function lumicashProvider(): PaymentProvider {
 
     async lookup(phone) {
       try {
-        const res = await post("/api/3rd/partner/get-account", { toAccPhone: customerMobile(phone) });
+        const { ok, body: res } = await post("/api/3rd/partner/get-account", { toAccPhone: customerMobile(phone) });
+        if (!ok) return { ok: false, reason: "Lumicash could not check this number" };
         if (res?.ResponseCode === "01") return { ok: true, name: JSON.parse(res.ResponseMessage).accountName };
         if (res?.ResponseCode === "05") return { ok: false, reason: "Wallet not found or locked" };
       } catch {
@@ -79,6 +98,8 @@ export function lumicashProvider(): PaymentProvider {
       const createdDate = now.toISOString();
       const requestId = toRequestId(input.refId);
       const mobile = customerMobile(input.phone || "");
+      // The signed amount and the sent amount must be the same integer.
+      const amount = Number(formatAmount(input.amount));
       const body = {
         Partner: cfg.partner,
         RequestId: requestId,
@@ -86,14 +107,14 @@ export function lumicashProvider(): PaymentProvider {
         AgentMobile: cfg.agentMobile,
         AgentCode: cfg.agentCode,
         Password: cfg.agentPassword,
-        Amount: input.amount,
+        Amount: amount,
         CreatedDate: formatBodyDate(now),
         RequestType: 1,
         Description: input.description,
         Signature: sign({
           key: cfg.signKey,
           createdAt: now,
-          amount: input.amount,
+          amount,
           customerMobile: mobile,
           agentCode: cfg.agentCode,
           partner: cfg.partner,
@@ -102,24 +123,32 @@ export function lumicashProvider(): PaymentProvider {
         }),
       };
 
-      let res: any;
+      // Lumicash may have debited the wallet on any unknown outcome; leave it pending so status() verifies rather than retrying.
+      const pending = (raw: Record<string, any>): StartResult => {
+        console.warn(`Lumicash cashout outcome unknown for refId ${input.refId}; left pending`);
+        return { outcome: "pending", raw };
+      };
+
+      let reply: LumiReply;
       try {
-        res = await post("/api/3rd/customer/transaction/partner/cashout-cashin", body);
+        reply = await post("/api/3rd/customer/transaction/partner/cashout-cashin", body);
       } catch (err) {
-        // Lumicash may have debited the wallet; leave it pending so status() verifies rather than retrying.
-        return { outcome: "pending", raw: { createdDate, requestId, error: String(err) } };
+        return pending({ createdDate, requestId, error: String(err) });
       }
 
       // Only the response plus what status() needs is kept; the request body (password, signature) never is.
-      const raw = { ...res, createdDate, requestId };
-      const code = String(res?.ResponseCode ?? "");
+      const raw = { ...(reply.body ?? {}), createdDate, requestId, httpStatus: reply.httpStatus };
+      const code = reply.body?.ResponseCode;
+      if (!reply.ok || typeof code !== "string") return pending(raw);
       if (code === "01") {
         // Typed as StatusResult so settlement gets amount and payer without a separate verify call.
-        const settled: StatusResult = { outcome: "successful", providerRef: res.RequestId, amount: input.amount, currency: "BIF", payerPhone: mobile, raw };
+        const settled: StatusResult = { outcome: "successful", providerRef: reply.body!.RequestId, amount, currency: "BIF", payerPhone: mobile, raw };
         return settled;
       }
+      const reason = failReason(code);
+      if (!reason) return pending(raw);
       if (code === "02") console.error(`Lumicash rejected the signature for refId ${input.refId}`);
-      return { outcome: "failed", reason: failReason(code), raw };
+      return { outcome: "failed", reason, raw };
     },
 
     async status(payment): Promise<StatusResult> {
@@ -134,24 +163,29 @@ export function lumicashProvider(): PaymentProvider {
         TransDate: formatTransDate(created),
         Type: "1",
       };
-      let res: any;
+      // Settlement replaces the stored payload with raw, so carry forward what the next poll needs.
+      const keep = { createdDate: created.toISOString(), requestId };
+      let reply: LumiReply;
       try {
-        res = await post("/api/3rd/customer/transaction/verifytransaction", body);
+        reply = await post("/api/3rd/customer/transaction/verifytransaction", body);
       } catch (err) {
-        return { outcome: "pending", raw: { error: String(err) } };
+        return { outcome: "pending", raw: { error: String(err), ...keep } };
       }
-      if (res?.ResponseCode !== "01") return { outcome: "pending", raw: res };
+      const res = reply.body;
+      const raw = { ...(res ?? {}), httpStatus: reply.httpStatus, ...keep };
+      if (!reply.ok || res?.ResponseCode !== "01") return { outcome: "pending", raw };
       if (res.Status === "01") {
+        const transAmount = Number(res.TransAmount);
         return {
           outcome: "successful",
-          providerRef: res.TransCode,
-          amount: Number(res.TransAmount),
+          providerRef: res.TransCode ?? payment.providerRef ?? requestId,
+          amount: res.TransAmount != null && Number.isFinite(transAmount) ? transAmount : payment.amount,
           currency: "BIF",
           payerPhone: payment.phone,
-          raw: res,
+          raw,
         };
       }
-      return { outcome: "failed", reason: res.ResponseMessage, raw: res };
+      return { outcome: "failed", reason: res.ResponseMessage, raw };
     },
   };
 }
