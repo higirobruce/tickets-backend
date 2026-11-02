@@ -1,16 +1,5 @@
 import { PaymentProvider, ProviderConfigError } from "./types";
-
-// Stub until Task 2 completes the mock provider.
-function mockProvider(): PaymentProvider {
-  return {
-    id: "mock",
-    label: "Test mode",
-    currencies: [],
-    phone: null,
-    start: async () => ({ outcome: "successful", raw: {} }),
-    status: async () => ({ outcome: "successful", raw: {} }),
-  };
-}
+import { mockProvider } from "./mock";
 
 const factories: Record<string, () => PaymentProvider> = {
   mock: () => mockProvider(),
