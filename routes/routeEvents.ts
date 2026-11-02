@@ -103,16 +103,17 @@ router.get("/:id/attendees.csv", ensureUserAuthorized, async (req, res) => {
   const event = await loadManagedEvent(req, res);
   if (!event) return;
   const tickets = await ticketModel.find({ event: event._id }).sort({ number: 1 });
-  const rows = [["number", "package", "status", "phone", "buyer", "email", "amount", "purchased_at", "checked_in_at"]];
+  const rows = [["number", "package", "status", "phone", "buyer", "email", "amount", "currency", "purchased_at", "checked_in_at"]];
   for (const t of tickets as any[]) {
     rows.push([
       t.number,
       t.ticketPackage?.title,
       t.status,
-      toInternational(t.momoPayload?.payer?.partyId) || "",
+      toInternational(t.payment?.phone ?? t.momoPayload?.payer?.partyId) || "",
       t.buyer?.name,
       t.buyer?.email,
-      t.complimentary ? 0 : t.momoPayload?.amount,
+      t.complimentary ? 0 : (t.payment?.amount ?? t.momoPayload?.amount),
+      t.payment?.currency ?? t.ticketPackage?.currency ?? "",
       t.createdAt ? formatStamp(t.createdAt) : "",
       t.status === "consumed" && t.updatedAt ? formatStamp(t.updatedAt) : "",
     ].map(csvCell));
@@ -130,10 +131,10 @@ router.post("/:id/broadcast", ensureUserAuthorized, async (req, res) => {
   const message = String(req.body?.message || "").trim();
   if (!message) return res.status(400).send({ errorMessage: "Write the message to send" });
   if (message.length > BROADCAST_MAX) return res.status(400).send({ errorMessage: `Keep the message under ${BROADCAST_MAX} characters` });
-  const tickets = await ticketModel.find({ event: event._id }).select("momoPayload.payer.partyId");
+  const tickets = await ticketModel.find({ event: event._id }).select("payment.phone momoPayload.payer.partyId");
   const phones = new Set<string>();
   for (const t of tickets as any[]) {
-    const phone = toInternational(t.momoPayload?.payer?.partyId);
+    const phone = toInternational(t.payment?.phone ?? t.momoPayload?.payer?.partyId);
     if (phone) phones.add(phone);
   }
   for (const phone of phones) sendMessage(phone, `${event.title}: ${message}`, "EVENTIXR");

@@ -86,12 +86,12 @@ describe("platform admin overview", () => {
 
     const res = await api().get("/admin/overview").set(bearer(admin.token));
     expect(res.status).toBe(200);
-    expect(res.body.totals).toEqual({ organisers: 2, events: 3, tickets: 4, paid: 3, revenue: 30000, consumed: 1 });
+    expect(res.body.totals).toEqual({ organisers: 2, events: 3, tickets: 4, paid: 3, revenue: [{ currency: "RWF", amount: 30000, tickets: 3 }], consumed: 1 });
     const alpha = res.body.organisers.find((o: any) => o.email === "a@example.com");
     expect(alpha.organisation).toBe("Alpha Events");
     expect(alpha.events).toBe(2);
     expect(alpha.tickets).toBe(2);
-    expect(alpha.revenue).toBe(25000);
+    expect(alpha.revenue).toEqual([{ currency: "RWF", amount: 25000, tickets: 2 }]);
     expect(res.body.recentEvents.map((e: any) => e.title).sort()).toEqual(["A1", "A2", "B1"]);
     expect(res.body.recentEvents[0].owner.organisation).toBeTypeOf("string");
   });

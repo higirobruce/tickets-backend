@@ -80,7 +80,7 @@ describe("PAYMENTS_MODE=mock (MoMo bypass for testing)", () => {
     await api().get(`/momo/statusOfRequest/${refId}`);
     const dash = await api().get(`/events/${event._id}/dashboard`)
       .set("Authorization", `Bearer ${owner.token}`);
-    expect(dash.body.totals).toEqual({ tickets: 1, paid: 1, revenue: 5000, consumed: 0, pending: 1 });
+    expect(dash.body.totals).toEqual({ tickets: 1, paid: 1, revenue: [{ currency: "RWF", amount: 5000, tickets: 1 }], consumed: 0, pending: 1 });
   });
 
   it("an unknown reference in mock mode is a 404, not a free ticket", async () => {

@@ -31,7 +31,7 @@ describe("complimentary tickets", () => {
     const dash = await api().get(`/events/${event._id}/dashboard`).set(bearer(owner.token));
     expect(dash.body.totals.tickets).toBe(2);
     expect(dash.body.totals.paid).toBe(0);
-    expect(dash.body.totals.revenue).toBe(0);
+    expect(dash.body.totals.revenue).toEqual([]);
   });
 
   it("complimentary tickets count against capacity and respect it", async () => {
@@ -61,7 +61,7 @@ describe("attendee export", () => {
     expect(res.headers["content-type"]).toMatch(/text\/csv/);
     expect(res.headers["content-disposition"]).toMatch(/attachment/);
     const lines = res.text.trim().split("\n");
-    expect(lines[0]).toBe("number,package,status,phone,buyer,email,amount,purchased_at,checked_in_at");
+    expect(lines[0]).toBe("number,package,status,phone,buyer,email,amount,currency,purchased_at,checked_in_at");
     expect(lines).toHaveLength(3);
     expect(lines[1]).toContain("1,VIP,consumed,+250788000001,Aline,aline@example.com,20000");
   });

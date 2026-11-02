@@ -12,6 +12,7 @@ import { issueTickets, webUrl } from "../services/tickets";
 import { seesEveryEvent, ticketScope } from "../services/access";
 import { eventModel } from "../models/events";
 import { publicEvent } from "../services/events";
+import { paidAmount, paidCurrency } from "../services/reporting";
 
 let router = Router();
 
@@ -191,25 +192,15 @@ router.post("/fromPayload", ensureUserAuthorized, requireRole("admin", "staff"),
 
 export default router;
 
+/** Paid tickets per package and currency; amounts in different currencies are never added together. */
 export async function getTicketsSummary(filter: { scope?: any; from?: Date } = {}) {
-  const match: any = { momoPayload: { $ne: null }, ...(filter.scope || {}) };
+  const match: any = { $or: [{ payment: { $ne: null } }, { momoPayload: { $ne: null } }], ...(filter.scope || {}) };
   if (filter.from && !isNaN(filter.from.getTime())) match.createdAt = { $gte: filter.from };
 
-  const pipeline = [
+  return ticketModel.aggregate([
     { $match: match },
-    {
-      $group: {
-        _id: "$ticketPackage.title",
-        count: { $count: {} },
-        total: {
-          $sum: {
-            $convert: { input: "$momoPayload.amount", to: "int", onError: 0, onNull: 0 },
-          },
-        },
-      },
-    },
-    { $sort: { _id: -1 as const } },
-  ];
-
-  return ticketModel.aggregate(pipeline);
+    { $group: { _id: { title: "$ticketPackage.title", currency: paidCurrency }, count: { $count: {} }, total: { $sum: paidAmount } } },
+    { $project: { _id: 0, title: "$_id.title", currency: "$_id.currency", count: 1, total: 1 } },
+    { $sort: { title: -1, currency: 1 } },
+  ]);
 }

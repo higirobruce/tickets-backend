@@ -116,9 +116,9 @@ describe("event dashboard", () => {
     const res = await api().get(`/events/${event._id}/dashboard`).set(bearer(a.token));
     expect(res.status).toBe(200);
     expect(res.body.event.title).toBe(event.title);
-    expect(res.body.totals).toEqual({ tickets: 4, paid: 3, revenue: 45000, consumed: 1, pending: 3 });
+    expect(res.body.totals).toEqual({ tickets: 4, paid: 3, revenue: [{ currency: "RWF", amount: 45000, tickets: 3 }], consumed: 1, pending: 3 });
     const vip = res.body.byPackage.find((p: any) => p.title === "VIP");
-    expect(vip).toEqual({ title: "VIP", count: 2, revenue: 40000, consumed: 1 });
+    expect(vip).toEqual({ title: "VIP", currency: "RWF", count: 2, revenue: 40000, consumed: 1 });
     expect(res.body.recent).toHaveLength(4);
     expect(res.body.recent[0].qrCode).toBeUndefined();
     expect(res.body.recent[0].number).toBeTypeOf("number");
@@ -150,7 +150,7 @@ describe("organiser limits on ticket routes", () => {
     expect(list.body.map((t: any) => t.number)).toEqual([1]);
     expect((await api().get(`/tickets?event=${theirs._id}`).set(bearer(a.token))).status).toBe(403);
     const summary = await api().get("/tickets/summary").set(bearer(a.token));
-    expect(summary.body).toEqual([{ _id: "VIP", count: 1, total: 1 }]);
+    expect(summary.body).toEqual([{ title: "VIP", currency: "RWF", count: 1, total: 1 }]);
     expect((await api().get(`/tickets/summary?event=${theirs._id}`).set(bearer(a.token))).status).toBe(403);
   });
 

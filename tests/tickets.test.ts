@@ -111,11 +111,11 @@ describe("ticket endpoints", () => {
     ]);
     const all = await api().get("/tickets/summary").set("Authorization", `Bearer ${token}`);
     expect(all.status).toBe(200);
-    const vip = all.body.find((r: any) => r._id === "VIP");
+    const vip = all.body.find((r: any) => r.title === "VIP");
     expect(vip.count).toBe(2);
     expect(vip.total).toBe(40000);
     const onlyB = await api().get(`/tickets/summary?event=${b._id}`).set("Authorization", `Bearer ${token}`);
     expect(onlyB.body).toHaveLength(1);
-    expect(onlyB.body[0]._id).toBe("Regular");
+    expect(onlyB.body[0].title).toBe("Regular");
   });
 });
