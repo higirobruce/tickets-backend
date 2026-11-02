@@ -24,9 +24,6 @@ export async function callProvider<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** PAYMENTS_MODE=mock skips MTN entirely: every request is treated as paid. Testing only. Kept until the route moves to the registry. */
-export const mockPayments = () => process.env.PAYMENTS_MODE === "mock";
-
 /**
  * Atomically takes `quantity` seats on a package. Returns the number left when it cannot.
  * Packages without a capacity, or without an id, are unlimited.

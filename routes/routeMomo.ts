@@ -1,38 +1,37 @@
 import { randomUUID } from "crypto";
-import { Router, Request, Response } from "express";
-import { paymentModel, PaymentStatuses } from "../models/payments";
+import { Router } from "express";
+import { paymentModel } from "../models/payments";
 import { ensureUserAuthorized } from "../middleware/auth";
 import { ticketSms, toInternational } from "../services/tickets";
-import { getToken, momoProvider } from "../services/providers/momo";
+import { getToken } from "../services/providers/momo";
 import { getProvider } from "../services/providers/registry";
-import {
-  mockPayments,
-  releaseStalePayments,
-  reserveCapacity,
-  settlePayment,
-  successfulResponse,
-} from "../services/payments";
+import { callProvider, checkPayment, releaseStalePayments, reserveCapacity, settlePayment } from "../services/payments";
 import sendMessage from "../services/sms";
+import { callbackHandler, fail } from "./routePayments";
 
-let router = Router();
+/**
+ * Legacy client contract. Everything here is a thin wrapper over the provider layer, so the
+ * old app keeps working while new clients use /payments.
+ */
+const router = Router();
 
-function upstreamError(res: Response, err: unknown) {
-  res.status(502).send({ errorMessage: `${err}` });
-}
-
-router.post("/getToken", ensureUserAuthorized, async (req, res) => {
+router.post("/getToken", ensureUserAuthorized, async (req, res, next) => {
   try {
-    res.send(await getToken());
+    res.send(await callProvider(() => getToken()));
   } catch (err) {
-    upstreamError(res, err);
+    fail(res, next, err);
   }
 });
 
-router.post("/requestToPay", async (req, res) => {
+router.post("/requestToPay", async (req, res, next) => {
   const { eventId, event, ticketPackage, quantity, buyer, ...paymentPayload } = req.body || {};
   if (!paymentPayload?.amount || !paymentPayload?.payer?.partyId) {
     return res.status(400).send({ errorMessage: "amount and payer.partyId are required" });
   }
+  // PAYMENTS_MODE=mock enables only the mock provider, so momo missing means test mode.
+  const provider = getProvider("momo") ?? getProvider("mock");
+  if (!provider) return res.status(400).send({ errorMessage: "MoMo is not enabled" });
+
   const refId = randomUUID();
   const qty = Math.max(1, Math.floor(Number(quantity) || 1));
   const targetEvent = eventId || event || undefined;
@@ -51,29 +50,34 @@ router.post("/requestToPay", async (req, res) => {
       });
     }
 
-    const record = {
+    const payment = await paymentModel.create({
       refId,
+      provider: provider.id,
+      amount: Number(paymentPayload.amount),
+      currency: paymentPayload.currency,
+      // Without phone on the record the ticket SMS has nowhere to go.
+      phone: paymentPayload.payer.partyId,
       payload: paymentPayload,
       event: targetEvent,
       ticketPackage,
       quantity: qty,
       reserved: Boolean(targetEvent && ticketPackage?._id),
       buyer: buyer ? { name: buyer.name, email: buyer.email } : undefined,
-    };
+    });
 
-    if (mockPayments()) {
-      await paymentModel.create(record);
+    const result = await callProvider(() =>
+      provider.start({
+        refId,
+        amount: Number(paymentPayload.amount),
+        currency: paymentPayload.currency,
+        phone: paymentPayload.payer.partyId,
+        description: paymentPayload.payerMessage || "",
+      }),
+    );
+    if (provider.id === "mock") {
+      // Legacy clients poll statusOfRequest, which settles through the mock provider.
       return res.status(202).send({ message: "Accepted (test mode, no payment taken)", refId, mock: true });
     }
-
-    const payment = await paymentModel.create(record);
-    const result = await momoProvider().start({
-      refId,
-      amount: Number(paymentPayload.amount),
-      currency: paymentPayload.currency,
-      phone: paymentPayload.payer.partyId,
-      description: paymentPayload.payerMessage || "",
-    });
     if (result.outcome === "failed") {
       // statusText can be empty (HTTP/2, proxies), so never let the client see a blank or misleading message.
       const reason = result.reason || "Payment request failed";
@@ -82,63 +86,34 @@ router.post("/requestToPay", async (req, res) => {
     }
     res.status(202).send({ message: "Accepted", refId });
   } catch (err) {
-    upstreamError(res, err);
+    fail(res, next, err);
   }
 });
 
-/** Looks the payment up with MTN (or the mock) and applies the result. */
-async function resolveAndSettle(payment: any, req: Request) {
-  if (payment.status === PaymentStatuses.successful) {
-    return { code: 200, body: await successfulResponse(payment) };
-  }
-  if (payment.status === PaymentStatuses.issuing) {
-    return { code: 200, body: { ...(payment.momoPayload || {}), status: "PENDING" } };
-  }
-  // momoProvider().status throws on a non-OK MTN response; callers turn that into a 502.
-  const provider = mockPayments() ? getProvider("mock")! : momoProvider();
-  return settlePayment(payment, await provider.status(payment));
-}
-
-router.get("/statusOfRequest/:refId", async (req, res) => {
+router.get("/statusOfRequest/:refId", async (req, res, next) => {
   const refId = String(req.params.refId);
   try {
-    let payment = await paymentModel.findOne({ refId });
-    if (!payment) {
-      if (mockPayments()) return res.status(404).send({ errorMessage: "Unknown payment reference" });
+    if (!(await paymentModel.exists({ refId }))) {
+      if (!getProvider("momo")) return res.status(404).send({ errorMessage: "Unknown payment reference" });
       // A client that started the payment before payment records existed.
       const { title, price, currency } = req.query;
-      payment = await paymentModel.create({
+      await paymentModel.create({
         refId,
+        provider: "momo",
         ticketPackage: title
           ? { title: String(title), price: Number(price), currency: currency ? String(currency) : undefined }
           : undefined,
       });
     }
-    const result = await resolveAndSettle(payment, req);
+    const result = await checkPayment(refId);
     res.status(result.code).send(result.body);
   } catch (err) {
-    upstreamError(res, err);
+    fail(res, next, err);
   }
 });
 
-/**
- * MTN calls this when a payment reaches a final state. The body is never trusted on its own:
- * the status is re-read from MTN before anything is issued.
- */
-const callback = async (req: Request, res: Response) => {
-  const body = req.body || {};
-  const refId = body.externalId || body.referenceId;
-  const payment = refId ? await paymentModel.findOne({ refId: String(refId) }) : null;
-  if (!payment) return res.status(404).send({ errorMessage: "Unknown payment reference" });
-  try {
-    const result = await resolveAndSettle(payment, req);
-    res.status(result.code >= 500 ? 500 : 200).send({ received: true, status: result.body?.status });
-  } catch (err) {
-    upstreamError(res, err);
-  }
-};
-router.post("/callback", callback);
-router.put("/callback", callback);
+router.post("/callback", callbackHandler("momo"));
+router.put("/callback", callbackHandler("momo"));
 
 router.post("/sendSMS", ensureUserAuthorized, async (req, res) => {
   const { partyId, ticketNumber, ticketPackage, eventTitle } = req.body;

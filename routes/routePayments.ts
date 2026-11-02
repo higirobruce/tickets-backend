@@ -7,7 +7,7 @@ import { callProvider, checkPayment, startPayment } from "../services/payments";
 const router = Router();
 
 /** A provider fault is 502 with its message; anything else is ours and goes to the app's 500 handler. */
-function fail(res: Response, next: NextFunction, err: unknown) {
+export function fail(res: Response, next: NextFunction, err: unknown) {
   if (err instanceof ProviderError) return res.status(502).send({ errorMessage: err.message });
   next(err);
 }
@@ -43,10 +43,11 @@ router.post("/lookup", async (req, res, next) => {
 
 /**
  * Providers call this when a payment reaches a final state. The body only names the payment;
- * its status is always re-read from the provider before anything is issued.
+ * its status is always re-read from the provider before anything is issued. `fixedProvider` lets the
+ * legacy /momo/callback URL, which carries no provider segment, share this handler.
  */
-const callback = async (req: Request, res: Response, next: NextFunction) => {
-  const provider = getProvider(String(req.params.provider));
+export const callbackHandler = (fixedProvider?: string) => async (req: Request, res: Response, next: NextFunction) => {
+  const provider = getProvider(fixedProvider ?? String(req.params.provider));
   const refId = provider?.callbackRef?.(req);
   try {
     const payment = refId ? await paymentModel.findOne({ refId: String(refId), provider: provider!.id }) : null;
@@ -57,8 +58,8 @@ const callback = async (req: Request, res: Response, next: NextFunction) => {
     fail(res, next, err);
   }
 };
-router.post("/:provider/callback", callback);
-router.put("/:provider/callback", callback);
+router.post("/:provider/callback", callbackHandler());
+router.put("/:provider/callback", callbackHandler());
 
 router.get("/:refId", async (req, res, next) => {
   try {
