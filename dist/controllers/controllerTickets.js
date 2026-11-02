@@ -9,58 +9,35 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateTicket = exports.getTicketById = exports.getAllTickets = void 0;
+exports.getAllTickets = getAllTickets;
+exports.getTicketById = getTicketById;
+exports.getTicketByNumber = getTicketByNumber;
+exports.updateTicket = updateTicket;
+exports.default = createTicket;
 const tickets_1 = require("../models/tickets");
 function getAllTickets() {
-    return __awaiter(this, void 0, void 0, function* () {
-        try {
-            let tickets = yield tickets_1.ticketModel.find({ event: "64a72d14ef9fc1c25561e7e9" });
-            return tickets;
-        }
-        catch (err) {
-            console.log(err);
-            throw Error(`${err}`);
-        }
+    return __awaiter(this, arguments, void 0, function* (scope = {}) {
+        return tickets_1.ticketModel.find(scope).sort({ createdAt: -1 });
     });
 }
-exports.getAllTickets = getAllTickets;
 function getTicketById(id) {
     return __awaiter(this, void 0, void 0, function* () {
-        try {
-            let ticket = yield tickets_1.ticketModel.findById(id);
-            return ticket;
-        }
-        catch (err) {
-            console.log(err);
-            throw Error(`${err}`);
-        }
+        return tickets_1.ticketModel.findById(id);
     });
 }
-exports.getTicketById = getTicketById;
+function getTicketByNumber(number) {
+    return __awaiter(this, void 0, void 0, function* () {
+        return tickets_1.ticketModel.findOne({ number });
+    });
+}
 function updateTicket(id, updates) {
     return __awaiter(this, void 0, void 0, function* () {
-        try {
-            let ticket = yield tickets_1.ticketModel.findByIdAndUpdate(id, { $set: updates });
-            return ticket;
-        }
-        catch (err) {
-            console.log(err);
-            throw Error(`${err}`);
-        }
+        return tickets_1.ticketModel.findByIdAndUpdate(id, { $set: updates }, { new: true });
     });
 }
-exports.updateTicket = updateTicket;
 function createTicket(ticketDoc) {
     return __awaiter(this, void 0, void 0, function* () {
-        try {
-            let newTicket = new tickets_1.ticketModel(ticketDoc);
-            let ticket = yield newTicket.save();
-            return ticket;
-        }
-        catch (err) {
-            console.log(err);
-            throw Error(`${err}`);
-        }
+        const newTicket = new tickets_1.ticketModel(ticketDoc);
+        return newTicket.save();
     });
 }
-exports.default = createTicket;

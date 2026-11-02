@@ -9,7 +9,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createTicket = exports.getEventById = exports.getAllEvents = void 0;
+exports.getAllEvents = getAllEvents;
+exports.getEventById = getEventById;
+exports.createEvent = createEvent;
 const events_1 = require("../models/events");
 function getAllEvents() {
     return __awaiter(this, void 0, void 0, function* () {
@@ -22,7 +24,6 @@ function getAllEvents() {
         }
     });
 }
-exports.getAllEvents = getAllEvents;
 function getEventById(id) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
@@ -34,8 +35,7 @@ function getEventById(id) {
         }
     });
 }
-exports.getEventById = getEventById;
-function createTicket(eventDoc) {
+function createEvent(eventDoc) {
     return __awaiter(this, void 0, void 0, function* () {
         try {
             let newEvent = new events_1.eventModel(eventDoc);
@@ -47,4 +47,3 @@ function createTicket(eventDoc) {
         }
     });
 }
-exports.createTicket = createTicket;

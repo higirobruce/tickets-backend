@@ -1,0 +1,389 @@
+﻿API DOCUMENT SPECIFIACTION (Version – 1.0)
+Contents
+1.1        API for Deposit/Withdraw        3
+1.1.1        Get customer name        3
+1.1.2        Deposit/Withdraw for customer        5
+1.1.3        Check status of withdrawal transaction        8
+
+
+
+
+________________
+
+
+CHANGE RECORD
+#
+Action
+Change Summary
+Date
+Author
+1.0
+Create
+Create new document
+23/11/2022
+Tuongld
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
+________________
+   1. API for Deposit/Withdraw
+* This API document describes in detail how the Lumicash system and the Partner’s system communicate with each other.
+* API bulletins are built and publicly provided by the Lumicash system for the Partner’s system to connect.
+* The partner system will connect to the wallet system through these APIs to process the following transactions: Deposit; Get account information…
+1.1.1 Customer lookup 
+         1. Parameter request
+Parameter
+Required
+Type
+Description
+Mobile
+x
+String
+Mobile of wallet account
+         2. Response
+Parameter
+Type
+Description
+ResponseCode
+String
+Return transaction status
+ResponseMessage
+String
+Return the json result if the function is successful. Or return a message if the transaction error
+{CustomerName, CustomerCode, Mobile}
+CreatedDate
+String
+Transaction time
+         3. Return code
+Status value
+Description
+01
+Transaction successful
+05
+Wallet account is locked or does not exist
+00
+Transaction failed – System error
+         4. Sample
+Header:
+Name
+Value
+Description
+URL
+http://10.225.6.112:9020/ewapi/api/3rd/partner/get-account
+
+
+Method
+POST
+
+
+Header
+Content-Type : application/json
+
+
+Authorization : Basic 
+user/pass :  ex: HR_TELECOM / HRTELECOM@!#25012022
+Generate by: Base64(Username:Password)
+
+
+Request:
+{ 
+    "toAccPhone":"25768191919" //get info customer by phone
+} 
+
+
+Response:
+{
+    "ResponseCode": "01",
+    "ResponseMessage": "{\"accountId\":\"30966842\",\"accountName\":\"Bui Duc Truyen\",\"accountCode\":\"30966842\",\"roleId\":\"4\",\"phoneNumber\":\"25768191919\"}",
+    "CreatedDate": "/Date(1664520885000+0200)/"
+}
+
+
+
+
+1.1.2 Deposit  for customer
+1.1.2.1 Parameter request
+Parameter
+Required
+Type
+Description
+Partner
+x
+String
+Provided by Lumicash.
+RequestId
+x
+String
+Code side Partner. Is unique
+CustomerMobile
+x
+String
+Mobile of Customer
+AgentMobile
+x
+String
+Mobile of Agent
+AgentCode
+x
+String
+Code of Agent
+Password
+x
+String 
+Password of Agent wallet account
+Amount
+x
+decimal
+Amount of Deposit or Cashout
+CreatedDate
+x
+DateTime
+Transaction date
+RequestType
+x
+Int
+RequestType = 0 if Deposit (cash in).
+Description
+
+
+String
+Note
+Signature
+x
+String
+MD5 (Key+ CreatedDate.ToString(“yyyyMMddHHmmss”) + Amount.ToString(“####”) + CustomerMobile + AgentCode+Partner+RequestType+RequestId)
+1.1.2.2 Response
+Parameter
+Type
+Description
+ResponseCode
+String
+Return transaction status
+ResponseMessage
+String
+Reports error if the transaction fails
+CreatedDate
+String
+Transaction time
+RequestId
+Sting
+Transaction code in Lumicash system
+1.1.2.3 Return code
+Status value
+Description
+01
+Transaction successful
+02
+Invalid Signature_Authen
+03
+Wallet account is locked or does not exist
+04
+Customer is not found or doesn't have permission
+10
+Source account is not enough money
+17,24,25,26,31,32,35
+Over limit
+00
+Transaction failed – System error or Transaction amount exceeds limit
+1.1.2.4 Sample
+Header:
+Name
+Value
+Description
+URL
+http://10.225.6.112:9020/ewapi/api/3rd/customer/transaction/partner/cashout-cashin
+
+
+Method
+POST
+
+
+Header
+Content-Type : application/json
+
+
+Authorization : Basic 
+user/pass : ex: HR_TELECOM / HRTELECOM@!#25012022
+Generate by:
+Base64(Username:Password)
+
+
+Request:
+{
+    "Partner": "HR_TELECOM",
+    "RequestId": "1321323",
+    "CustomerMobile": "25768999555",
+    "AgentMobile": "25762479782",
+    "AgentCode": "89503",
+    "Password": "1234",
+    "Amount": 500,
+    "CreatedDate": "/Date(1558962432542+0200)/",
+    "RequestType": 1,
+    "Description": "Create request cashout",
+    "Signature": "375d223c9f84e129ff9c5e3d84311216"
+}
+
+
+Response:
+{"ResponseCode": "01", "ResponseMessage": "Transaction successful", "CreatedDate": "/Date(1641359023000+0200)/", "RequestId": "22010512947928"}
+
+
+Sample Code:
+a. C# (Can use: RestSharp, HttpClient …)
+publicvoid Test()
+{
+varclient= newRestClient("http://10.225.6.102:9900/api/3rd/customer/transaction/cashout-cashin");
+var request = newRestRequest(Method.POST);
+request.AddHeader("Cache-Control","no-cache");
+request.AddHeader("Authorization","Basic UGF5d2F5OlBheXdheUAxMjM0NSFAIw==");
+request.AddHeader("Content-Type","application/json");
+request.AddParameter("undefined", "{\n\"Partner\": \"Payway\",\n\"RequestId\": \"1321323\",\n\"CustomerMobile\": \"69988333\",\n\"AgentMobile\": \"69401116\",\n\"AgentCode\": \"30780\",\n\"Password\": \"1234\",\n\"Amount\": 1000,\n\"CreatedDate\": \"/Date(1558962432542+0200)/\",\n\"RequestType\": 1,\n\"Description\": \"Create request cashout\",\n\"Signature\":\"1cf009ff6bea5bc8c91cc098f7bdb51d\"\n}", ParameterType.RequestBody);
+IRestResponse response = client.Execute(request);
+}
+b. Java(Can use: OkHttpClient, Unirest…)
+publicvoid Test() {
+OkHttpClient client = newOkHttpClient();
+MediaTypemediaType = MediaType.parse("application/json");
+RequestBody body= RequestBody.create(mediaType, "{\n\"Partner\": \"Payway\",\n\"RequestId\": \"1321323\",\n\"CustomerMobile\": \"69988333\",\n\"AgentMobile\": \"69401116\",\n\"AgentCode\": \"30780\",\n\"Password\": \"1234\",\n\"Amount\": 1000,\n\"CreatedDate\": \"/Date(1558962432542+0200)/\",\n\"RequestType\": 1,\n\"Description\": \"Create requestcashout\",\n\"Signature\":\"1cf009ff6bea5bc8c91cc098f7bdb51d\"\n}");
+Request request = newRequest.Builder()
+.url("http://10.225.6.102:9900:9900/api/3rd/customer/transaction/cashout-cashin")
+.post(body)
+.addHeader("Content-Type","application/json")
+.addHeader("Authorization","BasicUGF5d2F5OlBheXdheUAxMjM0NSFAIw==")
+.addHeader("Cache-Control","no-cache").build();
+Response response = client.newCall(request).execute();
+        }
+1.1.3 Check status transaction 
+This function is used to create a pending transaction
+* API: http://10.225.6.112:9020/ewapi/api/3rd/customer/transaction/verifytransaction
+* Method: POST
+* Protocol: HTTP
+* Format: JSON 
+* Header: 
+Type: Basic Auth
+User/password : ex: HR_TELECOM / HRTELECOM@!#25012022
+
+
+Parameter
+Required
+Type
+Description
+RequestId
+x
+String
+Id of request call to Lumicash system
+PartnerCode
+x
+String
+Partner Code (Regulated and provided by Lumicash)
+TransCode
+x
+String
+Id is generated when make transaction
+ServiceId
+x
+String
+ Service Id (Regulated and provided by Lumicash)
+TransDate
+x
+String
+
+
+Type
+x
+String
+default is 1
+1.1.3.1 Response
+Parameter
+Type
+Description
+ResponseCode
+String
+Return transaction status
+ResponseMessage
+String
+Reports error if the transaction fails
+1.1.3.2 Return code
+Status value
+Description
+01
+Get successful
+00
+RequestId is already exist
+401
+Username or password incorrect or customer doesn't have permission
+400
+Bad request
+999 
+System error
+1.1.3.3 Sample request and response
+Request:
+{
+    "RequestId": "167214627241901",
+    "PartnerCode": "HR_TELECOM",
+    "TransCode": "2628185831697333",
+    "ServiceId": "CHECK_TRANSATION",
+    "TransDate": "20230130",
+    "Type": "1"
+}
+ Response:
+{
+    "ResponseCode": "01",
+    "ResponseMessage": "Transaction is Successful",
+    "Status": "01",
+    "TransCode": "2628185831697333",
+    "RequestId": "167214627241901",
+    "TransDate": "20210809144244000",
+    "TransAmount": 1000.00,
+    "TransFee": 50.00
+}

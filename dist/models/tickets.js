@@ -5,39 +5,14 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ticketModel = exports.ticketSchema = exports.packageSchema = exports.Statuses = exports.Currencies = void 0;
 const mongoose_1 = __importDefault(require("mongoose"));
-var Currencies;
-(function (Currencies) {
-    Currencies["rwf"] = "RWF";
-    Currencies["usd"] = "USD";
-    Currencies["eur"] = "EUR";
-})(Currencies || (exports.Currencies = Currencies = {}));
-var Statuses;
-(function (Statuses) {
-    Statuses["pending"] = "pending";
-    Statuses["ongoing"] = "ongoing";
-    Statuses["expired"] = "expired";
-    Statuses["cancelled"] = "cancelled";
-    Statuses["posponed"] = "postponed";
-    Statuses["upcoming"] = "upcoming";
-    Statuses["consumed"] = "consumed";
-})(Statuses || (exports.Statuses = Statuses = {}));
-exports.packageSchema = new mongoose_1.default.Schema({
-    title: {
-        type: String,
-    },
-    currency: {
-        type: String,
-        default: Currencies.rwf,
-    },
-    price: {
-        type: Number,
-    },
-});
+const shared_1 = require("./shared");
+Object.defineProperty(exports, "Currencies", { enumerable: true, get: function () { return shared_1.Currencies; } });
+Object.defineProperty(exports, "Statuses", { enumerable: true, get: function () { return shared_1.Statuses; } });
+Object.defineProperty(exports, "packageSchema", { enumerable: true, get: function () { return shared_1.packageSchema; } });
 exports.ticketSchema = new mongoose_1.default.Schema({
     number: {
         type: Number,
         unique: true,
-        dropDups: true,
         required: true,
     },
     qrCode: {
@@ -45,11 +20,11 @@ exports.ticketSchema = new mongoose_1.default.Schema({
         required: true,
     },
     ticketPackage: {
-        type: exports.packageSchema,
+        type: shared_1.packageSchema,
     },
     status: {
         type: String,
-        default: Statuses.pending,
+        default: shared_1.Statuses.pending,
     },
     momoRef: {
         type: String,
@@ -63,5 +38,10 @@ exports.ticketSchema = new mongoose_1.default.Schema({
         ref: "users",
     },
     momoPayload: {},
+    buyer: { name: String, email: String },
+    /** Issued by the organiser for free (press, guests); never counted as revenue. */
+    complimentary: { type: Boolean, default: false },
+    note: String,
 }, { timestamps: true });
+exports.ticketSchema.index({ event: 1, createdAt: -1 });
 exports.ticketModel = mongoose_1.default.model("tickets", exports.ticketSchema);

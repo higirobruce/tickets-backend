@@ -1,45 +1,31 @@
-import {userModel } from "../models/users";
-import crypto from 'crypto';
+import crypto from "crypto";
 
-let SALT = '762f021e88bdfdc80f8e174edbdfaf65';
-
-// export const generateUserNumber = async () => {
-//     // Get the last saved document
-//     const lastDocument = await userModel.findOne().sort({ number: -1 });
-//     // Generate a new 10-digit number, starting from 1000000000 and incrementing by 1
-//     let newNumber = 1000000;
-//     if (lastDocument && lastDocument.number) {
-//         newNumber = lastDocument.number + 1;
-//     }
-
-//     // Return the new number
-//     return newNumber;
-// }
+// Salt shared by every account created before per-user salts existed.
+// Changing it would lock those accounts out, so it only moves to an env var.
+const LEGACY_SALT =
+  process.env.PASSWORD_SALT || "762f021e88bdfdc80f8e174edbdfaf65";
 
 export const generatePassword = (
   length = 20,
-  wishlist = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz~!@-#$'
+  wishlist = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz~!@-#$"
 ) =>
   Array.from(crypto.randomFillSync(new Uint32Array(length)))
     .map((x) => wishlist[x % wishlist.length])
-    .join('')
+    .join("");
 
+export const generateSalt = () => crypto.randomBytes(16).toString("hex");
 
-export const hashPassword = (password: any) => {
+export const hashPassword = (password: string, salt: string = LEGACY_SALT) =>
+  crypto.pbkdf2Sync(password, salt, 1000, 64, "sha512").toString("hex");
 
-    // Creating a unique salt for a particular user 
-    
-    // Hashing user's salt and password with 1000 iterations, 
-
-    let hash = crypto.pbkdf2Sync(password, SALT,
-        1000, 64, `sha512`).toString(`hex`);
-
-    return hash.toString()
-};
-
-
-export const validPassword = (password: any, savedPassword:any) =>{
-    var hash = crypto.pbkdf2Sync(password,
-        SALT, 1000, 64, `sha512`).toString(`hex`);
-    return savedPassword === hash;
+export const validPassword = (
+  password: string,
+  savedPassword: string | undefined | null,
+  salt?: string | null
+) => {
+  if (!password || !savedPassword) return false;
+  const hash = hashPassword(password, salt || LEGACY_SALT);
+  const a = Buffer.from(hash);
+  const b = Buffer.from(savedPassword);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 };
