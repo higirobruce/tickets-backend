@@ -4,6 +4,9 @@ import { ensureUserAuthorized, publicUser, requireRole, ROLES } from "../middlew
 import { userModel } from "../models/users";
 import { eventModel } from "../models/events";
 import { ticketModel } from "../models/tickets";
+import { paymentModel } from "../models/payments";
+import { checkPayment } from "../services/payments";
+import { fail } from "./routePayments";
 
 let router = Router();
 router.use(ensureUserAuthorized, requireRole("admin"));
@@ -60,6 +63,36 @@ router.put("/users/:id", async (req, res) => {
   const user = await userModel.findByIdAndUpdate(id, { $set: { role } }, { new: true });
   if (!user) return res.status(404).send({ errorMessage: "User not found" });
   res.send(publicUser(user));
+});
+
+/** Payment ledger for support. `select` is an allowlist so request/response payloads (which hold credentials) never leave the server. */
+router.get("/payments", async (req, res, next) => {
+  const { status, provider } = req.query;
+  const filter: Record<string, string> = {};
+  if (typeof status === "string" && status) filter.status = status;
+  if (typeof provider === "string" && provider) filter.provider = provider;
+  const asked = Number(req.query.limit);
+  const limit = Number.isInteger(asked) && asked > 0 ? Math.min(asked, 200) : 50;
+  try {
+    const payments = await paymentModel
+      .find(filter)
+      .select("refId provider providerRef status amount currency phone event quantity issueError createdAt updatedAt")
+      .sort({ createdAt: -1 })
+      .limit(limit);
+    res.send({ payments });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/** Re-check a stuck payment with its provider and settle it (issues the ticket on success). */
+router.post("/payments/:refId/verify", async (req, res, next) => {
+  try {
+    const r = await checkPayment(String(req.params.refId));
+    res.status(r.code).send(r.body);
+  } catch (err) {
+    fail(res, next, err);
+  }
 });
 
 export default router;
