@@ -2,28 +2,13 @@ import mongoose from "mongoose";
 import { eventModel } from "../models/events";
 import { paymentModel, PaymentStatuses } from "../models/payments";
 import { ticketModel } from "../models/tickets";
-import { issueTickets, phoneFromPayload } from "./tickets";
+import { issueTickets } from "./tickets";
+import type { StatusResult } from "./providers/types";
 
 export const STALE_PENDING_MINUTES = 30;
-const TERMINAL_FAILURES = ["FAILED", "REJECTED", "EXPIRED", "TIMEOUT", "CANCELLED"];
 
-/** PAYMENTS_MODE=mock skips MTN entirely: every request is treated as paid. Testing only. */
+/** PAYMENTS_MODE=mock skips MTN entirely: every request is treated as paid. Testing only. Kept until the route moves to the registry. */
 export const mockPayments = () => process.env.PAYMENTS_MODE === "mock";
-
-export function mockStatus(payment: any) {
-  const payload = payment.payload || {};
-  return {
-    mock: true,
-    status: "SUCCESSFUL",
-    amount: String(payload.amount ?? payment.ticketPackage?.price ?? 0),
-    currency: payload.currency || payment.ticketPackage?.currency || "RWF",
-    externalId: payload.externalId,
-    payer: payload.payer,
-    payerMessage: payload.payerMessage,
-    financialTransactionId: `MOCK-${payment.refId.slice(0, 8)}`,
-    reason: "Test mode: no payment was taken",
-  };
-}
 
 /**
  * Atomically takes `quantity` seats on a package. Returns the number left when it cannot.
@@ -74,52 +59,63 @@ export async function successfulResponse(payment: any) {
 }
 
 /**
- * Applies a status reported by MTN (or the mock) to a payment record.
- * SUCCESSFUL claims the record atomically so tickets are issued exactly once,
- * whether the status came from the buyer polling or from MTN's callback.
- * Returns the body to send to a client.
+ * Applies a provider's normalised status to a payment record.
+ * A successful outcome claims the record atomically so tickets are issued exactly once,
+ * whether the status came from the buyer polling or from the provider's callback.
+ * Returns the body to send to a client; its `status` strings are the client contract.
  */
-export async function settlePayment(payment: any, status: any): Promise<{ code: number; body: any }> {
+export async function settlePayment(payment: any, result: StatusResult): Promise<{ code: number; body: any }> {
   const refId = payment.refId;
+  const raw = result.raw || {};
 
-  if (status?.status !== "SUCCESSFUL") {
-    const failed = TERMINAL_FAILURES.includes(String(status?.status));
-    await paymentModel.updateOne(
-      { refId },
-      { $set: { momoPayload: status, status: failed ? PaymentStatuses.failed : status?.status || payment.status } }
-    );
-    if (failed) await releaseReservation(payment);
-    return { code: 200, body: status };
+  if (result.outcome === "failed") {
+    await paymentModel.updateOne({ refId }, { $set: { momoPayload: raw, status: PaymentStatuses.failed } });
+    await releaseReservation(payment);
+    return { code: 200, body: { ...raw, status: "FAILED", reason: result.reason } };
+  }
+
+  if (result.outcome === "pending") {
+    await paymentModel.updateOne({ refId }, { $set: { momoPayload: raw } });
+    return { code: 200, body: { ...raw, status: "PENDING" } };
   }
 
   const claimed = await paymentModel.findOneAndUpdate(
     { refId, status: { $nin: [PaymentStatuses.successful, PaymentStatuses.issuing] } },
-    { $set: { status: PaymentStatuses.issuing, momoPayload: status } },
-    { new: true }
+    { $set: { status: PaymentStatuses.issuing, momoPayload: raw } },
+    { returnDocument: "after" }
   );
   if (!claimed) {
     const current = await paymentModel.findOne({ refId });
     if (current?.status === PaymentStatuses.successful) return { code: 200, body: await successfulResponse(current) };
-    return { code: 200, body: { ...status, status: "PENDING" } };
+    return { code: 200, body: { ...raw, status: "PENDING" } };
   }
 
+  const phone = result.payerPhone ?? claimed.phone ?? undefined;
   try {
     const tickets = await issueTickets({
       quantity: claimed.quantity,
       ticketPackage: claimed.ticketPackage,
       event: claimed.event,
-      momoPayload: status,
+      momoPayload: raw,
       momoRef: refId,
-      phone: phoneFromPayload(status) ?? phoneFromPayload(claimed.payload),
+      phone,
       buyer: claimed.buyer,
+      payment: {
+        provider: claimed.provider,
+        ref: result.providerRef,
+        amount: result.amount ?? claimed.amount ?? undefined,
+        currency: result.currency ?? claimed.currency ?? undefined,
+        phone,
+      },
     });
     claimed.tickets = tickets.map((t) => t._id);
     claimed.status = PaymentStatuses.successful;
+    claimed.providerRef = result.providerRef;
     claimed.issueError = undefined;
     await claimed.save();
-    return { code: 200, body: { ...status, tickets } };
+    return { code: 200, body: { ...raw, status: "SUCCESSFUL", tickets } };
   } catch (err) {
     await paymentModel.updateOne({ refId }, { $set: { status: PaymentStatuses.pending, issueError: `${err}` } });
-    return { code: 500, body: { errorMessage: `Payment succeeded but ticket issue failed: ${err}` } };
+    return { code: 500, body: { errorMessage: `Payment succeeded but ticket issue failed: ${err}`, refId } };
   }
 }

@@ -10,13 +10,21 @@ export enum PaymentStatuses {
 }
 
 /**
- * One record per MoMo requestToPay. It is the source of truth for what was
- * bought (event, package, quantity) and whether tickets were already issued,
- * so polling the status more than once can never issue twice.
+ * One record per payment request, whatever the provider. It is the source of
+ * truth for what was bought (event, package, quantity) and whether tickets were
+ * already issued, so polling the status more than once can never issue twice.
+ * `payload` is what we sent; `momoPayload` holds the provider's raw response.
  */
 export const paymentSchema = new mongoose.Schema(
   {
     refId: { type: String, required: true, unique: true },
+    /** Records created before providers existed are all MoMo, hence the default. */
+    provider: { type: String, default: "momo" },
+    /** The provider's own transaction id, known once it reports the payment. */
+    providerRef: String,
+    amount: Number,
+    currency: String,
+    phone: String,
     status: { type: String, default: PaymentStatuses.pending },
     payload: {},
     momoPayload: {},
@@ -33,5 +41,6 @@ export const paymentSchema = new mongoose.Schema(
 );
 
 paymentSchema.index({ status: 1 });
+paymentSchema.index({ provider: 1, providerRef: 1 });
 
 export const paymentModel = mongoose.model("payments", paymentSchema);

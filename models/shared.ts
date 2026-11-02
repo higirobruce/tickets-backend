@@ -4,6 +4,7 @@ export enum Currencies {
   rwf = "RWF",
   usd = "USD",
   eur = "EUR",
+  bif = "BIF",
 }
 
 /** Lifecycle values shared by events and tickets. */

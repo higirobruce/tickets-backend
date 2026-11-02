@@ -3,10 +3,10 @@ import { Router, Request, Response } from "express";
 import { paymentModel, PaymentStatuses } from "../models/payments";
 import { ensureUserAuthorized } from "../middleware/auth";
 import { ticketSms, toInternational } from "../services/tickets";
-import { fetchStatus, getToken, momoProvider } from "../services/providers/momo";
+import { getToken, momoProvider } from "../services/providers/momo";
+import { getProvider } from "../services/providers/registry";
 import {
   mockPayments,
-  mockStatus,
   releaseStalePayments,
   reserveCapacity,
   settlePayment,
@@ -77,7 +77,7 @@ router.post("/requestToPay", async (req, res) => {
     if (result.outcome === "failed") {
       // statusText can be empty (HTTP/2, proxies), so never let the client see a blank or misleading message.
       const reason = result.reason || "Payment request failed";
-      await settlePayment(payment, { status: "FAILED", reason });
+      await settlePayment(payment, { outcome: "failed", reason, raw: result.raw });
       return res.status(502).send({ message: reason, refId });
     }
     res.status(202).send({ message: "Accepted", refId });
@@ -94,8 +94,9 @@ async function resolveAndSettle(payment: any, req: Request) {
   if (payment.status === PaymentStatuses.issuing) {
     return { code: 200, body: { ...(payment.momoPayload || {}), status: "PENDING" } };
   }
-  const status = mockPayments() ? mockStatus(payment) : await fetchStatus(payment.refId);
-  return settlePayment(payment, status);
+  // momoProvider().status throws on a non-OK MTN response; callers turn that into a 502.
+  const provider = mockPayments() ? getProvider("mock")! : momoProvider();
+  return settlePayment(payment, await provider.status(payment));
 }
 
 router.get("/statusOfRequest/:refId", async (req, res) => {

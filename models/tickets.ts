@@ -33,6 +33,8 @@ export const ticketSchema = new mongoose.Schema(
       ref: "users",
     },
     momoPayload: {},
+    /** Provider-neutral record of how the ticket was paid for. */
+    payment: { provider: String, ref: String, amount: Number, currency: String, phone: String },
     buyer: { name: String, email: String },
     /** Issued by the organiser for free (press, guests); never counted as revenue. */
     complimentary: { type: Boolean, default: false },

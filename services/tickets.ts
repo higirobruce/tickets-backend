@@ -53,8 +53,10 @@ export interface IssueOptions {
   event?: any;
   momoPayload?: any;
   momoRef?: string;
-  /** Phone in MSISDN form, e.g. 250788123456. Defaults to the MoMo payer. */
+  /** Phone in MSISDN form, e.g. 250788123456. Defaults to the payer. */
   phone?: string;
+  /** Provider-neutral payment details, stored on every ticket. */
+  payment?: { provider: string; ref?: string; amount?: number; currency?: string; phone?: string };
   buyer?: { name?: string | null; email?: string | null } | null;
   complimentary?: boolean;
   note?: string;
@@ -68,7 +70,7 @@ export async function issueTickets(options: IssueOptions) {
   const quantity = Math.max(1, Math.floor(Number(options.quantity) || 1));
   const eventDoc = options.event ? await eventModel.findById(options.event) : null;
   const eventId = eventDoc?._id ?? (options.event || undefined);
-  const phone = toInternational(options.phone ?? phoneFromPayload(options.momoPayload));
+  const phone = toInternational(options.phone ?? options.payment?.phone ?? phoneFromPayload(options.momoPayload));
 
   const saved: any[] = [];
   for (let i = 0; i < quantity; i++) {
@@ -77,6 +79,7 @@ export async function issueTickets(options: IssueOptions) {
       event: eventId,
       momoPayload: options.momoPayload,
       momoRef: options.momoRef,
+      payment: options.payment,
       buyer: options.buyer || undefined,
       complimentary: Boolean(options.complimentary),
       note: options.note,
