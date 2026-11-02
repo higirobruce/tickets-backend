@@ -79,3 +79,12 @@ describe("momo provider", () => {
     expect((await p.status({ refId: "r" })).outcome).toBe("pending");
   });
 });
+
+describe("momo start failure", () => {
+  it("a non-2xx requesttopay returns failed with the statusText as reason", async () => {
+    process.env.PAYMENT_PROVIDERS = "momo";
+    fetchMock.mockResolvedValueOnce(ok({ access_token: "t" })).mockResolvedValueOnce({ ok: false, status: 500, statusText: "Boom", json: async () => ({}) });
+    const r = await getProvider("momo")!.start({ refId: "ref-2", amount: 5000, currency: "RWF", phone: "250788123456", description: "x" });
+    expect(r).toEqual({ outcome: "failed", reason: "Boom", raw: { status: "FAILED", reason: "Boom" } });
+  });
+});

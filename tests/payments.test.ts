@@ -3,6 +3,7 @@ import sendMessage from "../services/sms";
 import { fetchMock } from "./setup";
 import { api, seedEvent } from "./helpers";
 import { ticketModel } from "../models/tickets";
+import { paymentModel, PaymentStatuses } from "../models/payments";
 
 vi.mock("../services/sms", () => ({ default: vi.fn() }));
 
@@ -125,5 +126,23 @@ describe("MoMo payment flow", () => {
       .mockResolvedValueOnce(momoResponse({}, 500));
     const res = await api().get(`/momo/statusOfRequest/${refId}`);
     expect(res.status).toBe(502);
+  });
+
+  it("a failed requesttopay with an empty statusText responds 502 with a fallback message and marks the payment FAILED", async () => {
+    const event = await seedEvent();
+    fetchMock
+      .mockResolvedValueOnce(momoResponse({ access_token: "tok" }))
+      .mockResolvedValueOnce({ ok: false, status: 500, statusText: "", json: async () => ({}) });
+    const res = await api().post("/momo/requestToPay").send({
+      amount: "5000",
+      currency: "RWF",
+      payer: { partyIdType: "MSISDN", partyId: "250788123456" },
+      eventId: String(event._id),
+      ticketPackage: { title: "Regular", price: 5000, currency: "RWF" },
+    });
+    expect(res.status).toBe(502);
+    expect(res.body.message).toBe("Payment request failed");
+    const payment = await paymentModel.findOne({ refId: res.body.refId });
+    expect(payment?.status).toBe(PaymentStatuses.failed);
   });
 });

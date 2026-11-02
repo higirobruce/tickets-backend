@@ -75,9 +75,12 @@ router.post("/requestToPay", async (req, res) => {
       description: paymentPayload.payerMessage || "",
     });
     if (result.outcome === "failed") {
-      await settlePayment(payment, { status: "FAILED", reason: result.reason });
+      // statusText can be empty (HTTP/2, proxies), so never let the client see a blank or misleading message.
+      const reason = result.reason || "Payment request failed";
+      await settlePayment(payment, { status: "FAILED", reason });
+      return res.status(502).send({ message: reason, refId });
     }
-    res.status(result.outcome === "failed" ? 502 : 202).send({ message: result.reason || "Accepted", refId });
+    res.status(202).send({ message: "Accepted", refId });
   } catch (err) {
     upstreamError(res, err);
   }
