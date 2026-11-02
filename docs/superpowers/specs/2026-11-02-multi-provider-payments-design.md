@@ -168,7 +168,7 @@ Existing `MOMO_*` and `SMS_*` keys are unchanged. `.env.example` is updated.
 - Other readers of `momoPayload` the builder must also switch to the `payment` fallback: the attendee CSV export and broadcast in `routes/routeEvents.ts`.
 
 ### Stuck payments
-A Lumicash cashout can time out after the wallet was debited. The record stays `PENDING`; every status poll and the admin "Verify now" action call `verifytransaction` until it answers. `releaseStalePayments` may only expire a Lumicash record after a verify call has positively said failed/not found; an unreachable verify keeps the record pending indefinitely and visible on the admin page. Nothing in the system can issue a ticket without a provider confirmation.
+A Lumicash cashout can time out after the wallet was debited. The record stays `PENDING`; every status poll and the admin "Verify now" action call `verifytransaction` until it answers. `releaseStalePayments` may only expire a Lumicash record after a verify call has positively said failed/not found; an unreachable verify keeps the record pending indefinitely and visible on the admin page. Nothing in the system can issue a ticket without a provider confirmation. For a record whose verify never resolves, an admin can call `POST /admin/payments/:refId/release`, which expires a `PENDING` record (only), frees its seats and records `releasedBy`/`releasedAt`; it never issues tickets, and "mark as paid" still does not exist.
 
 ## Left to the builder
 - File layout inside `services/providers/`, and whether the registry is a module-level singleton or built per request (singleton with a `resetProviders()` for tests is the obvious choice).
