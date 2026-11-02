@@ -21,5 +21,8 @@ export interface PaymentProvider {
   callbackRef?(req: Request): string | undefined;
 }
 
+/** Wraps anything a provider call throws, so routes answer 502 for upstream faults and 500 for our own. */
+export class ProviderError extends Error {}
+
 /** Thrown for bad provider configuration (e.g. an unknown id in PAYMENT_PROVIDERS). */
 export class ProviderConfigError extends Error {}

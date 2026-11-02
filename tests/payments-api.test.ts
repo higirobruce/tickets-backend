@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { settlePayment } from "../services/payments";
+import { settlePayment, releaseStalePayments, STALE_VERIFY_BATCH, STALE_VERIFY_INTERVAL_MINUTES } from "../services/payments";
 import { paymentModel } from "../models/payments";
 import { ticketModel } from "../models/tickets";
 import { eventModel } from "../models/events";
@@ -156,5 +156,58 @@ describe("POST /payments/start", () => {
     expect((await paymentModel.findOne({ refId: "late-fail" }))!.status).toBe("SUCCESSFUL");
     expect(await ticketModel.countDocuments()).toBe(1);
     expect((await eventModel.findById(event._id))!.packages[0].sold).toBe(1);
+  });
+});
+
+describe("seat release and stale verification", () => {
+  const old = () => new Date(Date.now() - 31 * 60 * 1000);
+  const tight = () => seedEvent({ packages: [{ title: "Regular", price: 5000, currency: "RWF", capacity: 2, sold: 1 }] });
+  const sold = async (id: any) => (await eventModel.findById(id))!.packages[0].sold;
+
+  it("a payment settled as failed twice frees its seats once", async () => {
+    const event = await tight();
+    const p = await paymentModel.create({ refId: "twice", provider: "momo", event: event._id, ticketPackage: event.packages[0], quantity: 1, reserved: true });
+    await settlePayment(p, { outcome: "failed", reason: "first", raw: { n: 1 } });
+    expect(await sold(event._id)).toBe(0);
+    await settlePayment(p, { outcome: "failed", reason: "second", raw: { n: 2 } });
+    expect(await sold(event._id)).toBe(0);
+    expect((await paymentModel.findOne({ refId: "twice" }))!.momoPayload).toEqual({ n: 1 });
+  });
+  it("a failure that arrives after the sweep expired the payment changes nothing", async () => {
+    const event = await tight();
+    const p = await paymentModel.create({ refId: "swept", provider: "momo", event: event._id, ticketPackage: event.packages[0], quantity: 1, reserved: true, createdAt: old() });
+    await releaseStalePayments();
+    expect(await sold(event._id)).toBe(0);
+    await settlePayment(p, { outcome: "failed", reason: "late", raw: {} });
+    expect((await paymentModel.findOne({ refId: "swept" }))!.status).toBe("EXPIRED");
+    expect(await sold(event._id)).toBe(0);
+  });
+  it("stale Lumicash payments are verified a few at a time and not again within the interval", async () => {
+    Object.assign(process.env, LUMI_ENV); resetProviders();
+    expect(STALE_VERIFY_BATCH).toBe(3); expect(STALE_VERIFY_INTERVAL_MINUTES).toBe(10);
+    const event = await seedEvent({ packages: [{ title: "VIP", price: 7000, currency: "BIF", capacity: 9 }] });
+    for (const refId of ["s1", "s2", "s3", "s4"]) {
+      await paymentModel.create({ refId, provider: "lumicash", reserved: true, event: event._id, ticketPackage: event.packages[0], quantity: 1, createdAt: old() });
+    }
+    fetchMock.mockRejectedValue(new Error("ECONNREFUSED"));                // every verify stays pending
+    await releaseStalePayments();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    await releaseStalePayments();                                            // only s4 has never been verified
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    await releaseStalePayments();
+    expect(fetchMock).toHaveBeenCalledTimes(4);
+    expect(await paymentModel.countDocuments({ status: "PENDING", reserved: true })).toBe(4);
+  });
+  it("only provider failures are 502; anything else goes to the app's 500 handler", async () => {
+    process.env.PAYMENT_PROVIDERS = "momo"; resetProviders();
+    const event = await seedEvent(); const pkg: any = event.packages[0];
+    fetchMock.mockResolvedValueOnce(ok({}, 500));                            // MoMo token request fails
+    const start = await api().post("/payments/start").send({ provider: "momo", eventId: String(event._id), packageId: String(pkg._id), phone: "788123456" });
+    expect(start.status).toBe(502); expect(start.body.errorMessage).toMatch(/MoMo token request failed/);
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => {});
+    const boom = vi.spyOn(paymentModel, "findOne").mockRejectedValueOnce(new Error("db down"));
+    const res = await api().get("/payments/whatever");
+    expect(res.status).toBe(500);
+    boom.mockRestore(); quiet.mockRestore();
   });
 });

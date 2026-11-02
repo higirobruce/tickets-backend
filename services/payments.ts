@@ -6,9 +6,23 @@ import { ticketModel } from "../models/tickets";
 // Called through the namespace so tests can make ticket issuing fail on demand.
 import * as ticketService from "./tickets";
 import { getProvider } from "./providers/registry";
+import { ProviderError } from "./providers/types";
 import type { StatusResult } from "./providers/types";
 
 export const STALE_PENDING_MINUTES = 30;
+/** A stale Lumicash payment is re-verified at most this often... */
+export const STALE_VERIFY_INTERVAL_MINUTES = 10;
+/** ...and at most this many per sweep, because the sweep runs inline before every new payment. */
+export const STALE_VERIFY_BATCH = 3;
+
+/** Rethrows anything a provider call throws as a ProviderError, so routes can tell upstream faults from ours. */
+export async function callProvider<T>(fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    throw err instanceof ProviderError ? err : new ProviderError(`${err instanceof Error ? err.message : err}`);
+  }
+}
 
 /** PAYMENTS_MODE=mock skips MTN entirely: every request is treated as paid. Testing only. Kept until the route moves to the registry. */
 export const mockPayments = () => process.env.PAYMENTS_MODE === "mock";
@@ -33,8 +47,10 @@ export async function reserveCapacity(eventId: any, packageId: any, quantity: nu
   return { ok: false as const, remaining: Math.max(0, (now?.capacity ?? 0) - (now?.sold ?? 0)) };
 }
 
+/** Claims the reservation flag first, so concurrent releases of one payment free its seats only once. */
 async function releaseReservation(payment: any) {
-  if (!payment.reserved) return;
+  const claimed = await paymentModel.updateOne({ _id: payment._id, reserved: true }, { $set: { reserved: false } });
+  if (claimed.modifiedCount !== 1) return;
   const packageId = payment.ticketPackage?._id;
   if (payment.event && packageId) {
     await eventModel.updateOne(
@@ -42,7 +58,6 @@ async function releaseReservation(payment: any) {
       { $inc: { "packages.$.sold": -payment.quantity } }
     );
   }
-  await paymentModel.updateOne({ _id: payment._id }, { $set: { reserved: false } });
 }
 
 /** Frees seats held by payments that never completed. Cheap enough to run before every new request. */
@@ -51,10 +66,25 @@ export async function releaseStalePayments() {
   const stale = await paymentModel
     .find({ status: PaymentStatuses.pending, reserved: true, createdAt: { $lt: cutoff } })
     .sort({ _id: 1 });
+  const verifyCutoff = new Date(Date.now() - STALE_VERIFY_INTERVAL_MINUTES * 60 * 1000);
+  const toVerify = new Set(
+    stale
+      .filter((p) => p.provider === "lumicash" && !(p.lastVerifiedAt && p.lastVerifiedAt >= verifyCutoff))
+      .sort((a, b) => (a.lastVerifiedAt?.getTime() ?? 0) - (b.lastVerifiedAt?.getTime() ?? 0))
+      .slice(0, STALE_VERIFY_BATCH)
+      .map((p) => String(p._id))
+  );
   let released = 0;
   for (const payment of stale) {
-    if (payment.provider === "lumicash" && !(await lumicashConfirmsFailed(payment))) continue;
-    await paymentModel.updateOne({ _id: payment._id }, { $set: { status: PaymentStatuses.expired } });
+    if (payment.provider === "lumicash") {
+      if (!toVerify.has(String(payment._id)) || !(await lumicashConfirmsFailed(payment, verifyCutoff))) continue;
+    }
+    // Conditional, so a payment that settled meanwhile is neither expired nor released.
+    const expired = await paymentModel.updateOne(
+      { _id: payment._id, status: PaymentStatuses.pending },
+      { $set: { status: PaymentStatuses.expired } }
+    );
+    if (expired.modifiedCount !== 1) continue;
     await releaseReservation(payment);
     released++;
   }
@@ -64,10 +94,16 @@ export async function releaseStalePayments() {
 /**
  * A Lumicash cashout is synchronous, so a stale pending one may already have debited the wallet.
  * Only a verify that says failed lets it expire; anything else leaves it for an admin to resolve.
+ * Stamping lastVerifiedAt first means concurrent sweeps never verify the same payment twice.
  */
-async function lumicashConfirmsFailed(payment: any) {
+async function lumicashConfirmsFailed(payment: any, verifyCutoff: Date) {
   const provider = getProvider("lumicash");
   if (!provider) return false;
+  const stamped = await paymentModel.updateOne(
+    { _id: payment._id, $or: [{ lastVerifiedAt: null }, { lastVerifiedAt: { $lt: verifyCutoff } }] },
+    { $set: { lastVerifiedAt: new Date() } }
+  );
+  if (stamped.modifiedCount !== 1) return false;
   try {
     return (await provider.status(payment)).outcome === "failed";
   } catch {
@@ -91,9 +127,9 @@ export async function settlePayment(payment: any, result: StatusResult): Promise
   const raw = result.raw || {};
 
   if (result.outcome === "failed") {
-    // A late or replayed failure must never undo a payment that is already paid or being issued.
+    // Only a pending payment can fail: a paid, issuing, failed or expired one keeps its first outcome.
     const marked = await paymentModel.updateOne(
-      { refId, status: { $nin: [PaymentStatuses.successful, PaymentStatuses.issuing] } },
+      { refId, status: PaymentStatuses.pending },
       { $set: { momoPayload: raw, status: PaymentStatuses.failed } }
     );
     if (marked.modifiedCount === 1) await releaseReservation(payment);
@@ -223,7 +259,7 @@ export async function startPayment(r: StartRequest): Promise<{ code: number; bod
     payload: { description },
   });
 
-  const result = await provider.start({ refId, amount, currency, phone, description });
+  const result = await callProvider(() => provider.start({ refId, amount, currency, phone, description }));
   if (result.outcome === "pending") {
     await paymentModel.updateOne({ refId }, { $set: { momoPayload: result.raw } });
     return { code: 202, body: { refId, status: "PENDING", ...(provider.id === "mock" ? { mock: true } : {}) } };
@@ -234,8 +270,8 @@ export async function startPayment(r: StartRequest): Promise<{ code: number; bod
 }
 
 /**
- * Re-reads a payment's state from its provider and applies it. Callers map a thrown
- * provider error to 502.
+ * Re-reads a payment's state from its provider and applies it. A provider failure is
+ * thrown as a ProviderError, which callers map to 502.
  */
 export async function checkPayment(refId: string): Promise<{ code: number; body: any }> {
   const payment = await paymentModel.findOne({ refId: String(refId) });
@@ -248,5 +284,5 @@ export async function checkPayment(refId: string): Promise<{ code: number; body:
   }
   const provider = getProvider(payment.provider);
   if (!provider) return { code: 409, body: { errorMessage: "Payment method no longer available" } };
-  return settlePayment(payment, await provider.status(payment));
+  return settlePayment(payment, await callProvider(() => provider.status(payment)));
 }

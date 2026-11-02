@@ -36,6 +36,8 @@ export const paymentSchema = new mongoose.Schema(
     /** True while this payment holds capacity on its package. */
     reserved: { type: Boolean, default: false },
     buyer: { name: String, email: String },
+    /** When the stale sweep last asked the provider about this payment; throttles re-verification. */
+    lastVerifiedAt: Date,
   },
   { timestamps: true }
 );
