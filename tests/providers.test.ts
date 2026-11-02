@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { enabledProviderIds, enabledProviders, getProvider, providersForCurrency, resetProviders } from "../services/providers/registry";
+import { ProviderConfigError } from "../services/providers/types";
 import { fetchMock } from "./setup";
 
 const env = { ...process.env };
@@ -86,5 +87,14 @@ describe("momo start failure", () => {
     fetchMock.mockResolvedValueOnce(ok({ access_token: "t" })).mockResolvedValueOnce({ ok: false, status: 500, statusText: "Boom", json: async () => ({}) });
     const r = await getProvider("momo")!.start({ refId: "ref-2", amount: 5000, currency: "RWF", phone: "250788123456", description: "x" });
     expect(r).toEqual({ outcome: "failed", reason: "Boom", raw: { status: "FAILED", reason: "Boom" } });
+  });
+});
+
+describe("startup config check", () => {
+  it("lumicash with no LUMICASH_* env throws ProviderConfigError naming the first missing key", () => {
+    process.env.PAYMENT_PROVIDERS = "lumicash";
+    for (const k of Object.keys(process.env)) if (k.startsWith("LUMICASH_")) delete process.env[k];
+    expect(() => enabledProviders()).toThrow(ProviderConfigError);
+    expect(() => enabledProviders()).toThrow(/LUMICASH_BASE_URL/);
   });
 });
